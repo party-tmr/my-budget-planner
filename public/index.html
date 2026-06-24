@@ -10,380 +10,468 @@
 <script src="https://cdn.tailwindcss.com"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
-<style>body{margin:0;font-family:ui-sans-serif,system-ui,-apple-system,sans-serif}*{box-sizing:border-box}</style>
+<style>body{margin:0;font-family:ui-sans-serif,system-ui,-apple-system,sans-serif}*{box-sizing:border-box}@keyframes spin{to{transform:rotate(360deg)}}.ani-spin{animation:spin 1s linear infinite}</style>
 </head>
 <body>
 <div id="root"></div>
-<script type="text/babel" data-type="module">
-/*
- * Firebase init — placed HERE inside the Babel block because Babel Standalone
- * only compiles and executes type="text/babel" scripts AFTER DOMContentLoaded,
- * which guarantees every CDN <script> above has finished loading and the
- * global `firebase` object exists on `window`.
- */
-const firebaseApp = firebase.initializeApp({
-  apiKey: "AIzaSyDE_JWPF9Egvm91K_YQVKGDja_Swl9gRiQ",
-  authDomain: "my-budget-planner-230669.firebaseapp.com",
-  projectId: "my-budget-planner-230669",
-  storageBucket: "my-budget-planner-230669.firebasestorage.app",
-  messagingSenderId: "1031332350376",
-  appId: "1:1031332350376:web:3d97957fb6be88b3eb359d",
-  measurementId: "G-TWL6364X0Z"
-});
-const db = firebase.firestore();
-
+<script type="text/babel">
+const firebaseApp=firebase.initializeApp({apiKey:"AIzaSyDE_JWPF9Egvm91K_YQVKGDja_Swl9gRiQ",authDomain:"my-budget-planner-230669.firebaseapp.com",projectId:"my-budget-planner-230669",storageBucket:"my-budget-planner-230669.firebasestorage.app",messagingSenderId:"1031332350376",appId:"1:1031332350376:web:3d97957fb6be88b3eb359d"});
+const db=firebase.firestore();
 const{useState,useMemo,useEffect,Fragment}=React;
-
-/* === Firestore helpers === */
 const COL="campaigns";
-const sanitize=obj=>{const o={};for(const[k,v]of Object.entries(obj)){if(k==="id"||k==="m")continue;o[k]=v===undefined?null:v;}return o;};
-const fromDoc=doc=>({id:doc.id,noAwo:false,awoCustom:"",equalSplit:false,totalCampaignBudget:0,reserveTotal:0,statusOverride:null,targetSplit:"Ad Group Level",creatorType:"KOL",audience:"Prospect",kpiResult:0,cpr:0,...doc.data()});
+const sanitize=o=>{const r={};for(const[k,v]of Object.entries(o)){if(k==="id"||k==="m")continue;r[k]=v===undefined?null:v;}return r;};
+const fromDoc=d=>({id:d.id,noAwo:false,awoCustom:"",equalSplit:false,totalCampaignBudget:0,reserveTotal:0,statusOverride:null,targetSplit:"Ad Group Level",creatorType:"KOL",audience:"Prospect",kpiResult:0,cpr:0,...d.data()});
 
-/* === Icons (inline SVG replacing lucide-react) === */
-const I=p=>({size=24,className=""})=><svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className} dangerouslySetInnerHTML={{__html:p}}/>;
-const Sparkles=I('<path d="m12 3-1.9 5.8a2 2 0 0 1-1.3 1.3L3 12l5.8 1.9a2 2 0 0 1 1.3 1.3L12 21l1.9-5.8a2 2 0 0 1 1.3-1.3L21 12l-5.8-1.9a2 2 0 0 1-1.3-1.3Z"/><path d="M5 3v4"/><path d="M19 17v4"/><path d="M3 5h4"/><path d="M17 19h4"/>');
-const Upload=I('<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" x2="12" y1="3" y2="15"/>');
-const Plus=I('<line x1="12" x2="12" y1="5" y2="19"/><line x1="5" x2="19" y1="12" y2="12"/>');
-const XIcon=I('<path d="M18 6 6 18"/><path d="m6 6 12 12"/>');
-const ArrowUpDown=I('<path d="m21 16-4 4-4-4"/><path d="M17 20V4"/><path d="m3 8 4-4 4 4"/><path d="M7 4v16"/>');
-const ArrowUp=I('<path d="m5 12 7-7 7 7"/><path d="M12 19V5"/>');
-const ArrowDown=I('<path d="M12 5v14"/><path d="m19 12-7 7-7-7"/>');
-const Search=I('<circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/>');
-const LayoutGrid=I('<rect width="7" height="7" x="3" y="3" rx="1"/><rect width="7" height="7" x="14" y="3" rx="1"/><rect width="7" height="7" x="14" y="14" rx="1"/><rect width="7" height="7" x="3" y="14" rx="1"/>');
-const CalendarRange=I('<rect width="18" height="18" x="3" y="4" rx="2"/><line x1="16" x2="16" y1="2" y2="6"/><line x1="8" x2="8" y1="2" y2="6"/><line x1="3" x2="21" y1="10" y2="10"/><path d="M17 14h-6"/><path d="M13 18H7"/>');
-const Wand2=I('<path d="m21.64 3.64-1.28-1.28a1.21 1.21 0 0 0-1.72 0L2.36 18.64a1.21 1.21 0 0 0 0 1.72l1.28 1.28a1.2 1.2 0 0 0 1.72 0L21.64 5.36a1.2 1.2 0 0 0 0-1.72Z"/><path d="m14 7 3 3"/>');
-const TrendingUp=I('<polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/>');
-const TrendingDown=I('<polyline points="22 17 13.5 8.5 8.5 13.5 2 7"/><polyline points="16 17 22 17 22 11"/>');
-const Minus=I('<path d="M5 12h14"/>');
-const Target=I('<circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/>');
-const Wallet=I('<path d="M21 12V7H5a2 2 0 0 1 0-4h14v4"/><path d="M3 5v14a2 2 0 0 0 2 2h16v-5"/><path d="M18 12a2 2 0 0 0 0 4h4v-4Z"/>');
-const Clock=I('<circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>');
-const CircleDashed=I('<path d="M10.1 2.2a10 10 0 0 1 3.8 0"/><path d="M17.6 3.7a10 10 0 0 1 2.7 2.7"/><path d="M21.8 10.1a10 10 0 0 1 0 3.8"/><path d="M20.3 17.6a10 10 0 0 1-2.7 2.7"/><path d="M13.9 21.8a10 10 0 0 1-3.8 0"/><path d="M6.4 20.3a10 10 0 0 1-2.7-2.7"/><path d="M2.2 13.9a10 10 0 0 1 0-3.8"/><path d="M3.7 6.4a10 10 0 0 1 2.7-2.7"/>');
-const Activity=I('<path d="M22 12h-4l-3 9L9 3l-3 9H2"/>');
-const Trophy=I('<path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"/><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"/><path d="M4 22h16"/><path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22"/><path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22"/><path d="M18 2H6v7a6 6 0 0 0 12 0V2Z"/>');
-const CheckCircle2=I('<circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/>');
-const Trash2=I('<path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/><line x1="10" x2="10" y1="11" y2="17"/><line x1="14" x2="14" y1="11" y2="17"/>');
-const AlertTriangle=I('<path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><path d="M12 9v4"/><path d="M12 17h.01"/>');
-const CalendarDays=I('<rect width="18" height="18" x="3" y="4" rx="2"/><line x1="16" x2="16" y1="2" y2="6"/><line x1="8" x2="8" y1="2" y2="6"/><line x1="3" x2="21" y1="10" y2="10"/><path d="M8 14h.01"/><path d="M12 14h.01"/><path d="M16 14h.01"/><path d="M8 18h.01"/><path d="M12 18h.01"/><path d="M16 18h.01"/>');
-const Layers=I('<path d="m12.83 2.18a2 2 0 0 0-1.66 0L2.6 6.08a1 1 0 0 0 0 1.83l8.58 3.91a2 2 0 0 0 1.66 0l8.58-3.9a1 1 0 0 0 0-1.84Z"/><path d="m22 17.65-9.17 4.16a2 2 0 0 1-1.66 0L2 17.65"/><path d="m22 12.65-9.17 4.16a2 2 0 0 1-1.66 0L2 12.65"/>');
-const ChevronRight=I('<path d="m9 18 6-6-6-6"/>');
-const ChevronDown=I('<path d="m6 9 6 6 6-6"/>');
-const Table2=I('<path d="M9 3H5a2 2 0 0 0-2 2v4m6-6h10a2 2 0 0 1 2 2v4M9 3v18m0 0h10a2 2 0 0 0 2-2V9M9 21H5a2 2 0 0 1-2-2V9m0 0h18"/>');
-const Settings2=I('<path d="M20 7h-9"/><path d="M14 17H5"/><circle cx="17" cy="17" r="3"/><circle cx="7" cy="7" r="3"/>');
-const Check=I('<polyline points="20 6 9 17 4 12"/>');
-const Gauge=I('<path d="m12 14 4-4"/><path d="M3.34 19a10 10 0 1 1 17.32 0"/>');
-const Package=I('<path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/>');
-const CalendarClock=I('<path d="M21 7.5V6a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h3.5"/><path d="M16 2v4"/><path d="M8 2v4"/><path d="M3 10h5"/><path d="M17.5 17.5 16 16.3V14"/><circle cx="16" cy="16" r="6"/>');
+/* Icons */
+const IC=p=>({size=24,className=""})=><svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className} dangerouslySetInnerHTML={{__html:p}}/>;
+const Sparkles=IC('<path d="m12 3-1.9 5.8a2 2 0 0 1-1.3 1.3L3 12l5.8 1.9a2 2 0 0 1 1.3 1.3L12 21l1.9-5.8a2 2 0 0 1 1.3-1.3L21 12l-5.8-1.9a2 2 0 0 1-1.3-1.3Z"/>');
+const Upload=IC('<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/>');
+const Plus=IC('<line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>');
+const XIcon=IC('<path d="M18 6 6 18"/><path d="m6 6 12 12"/>');
+const Search=IC('<circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/>');
+const LayoutGrid=IC('<rect width="7" height="7" x="3" y="3" rx="1"/><rect width="7" height="7" x="14" y="3" rx="1"/><rect width="7" height="7" x="14" y="14" rx="1"/><rect width="7" height="7" x="3" y="14" rx="1"/>');
+const CalendarRange=IC('<rect width="18" height="18" x="3" y="4" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>');
+const Wand2=IC('<path d="m21.64 3.64-1.28-1.28a1.21 1.21 0 0 0-1.72 0L2.36 18.64a1.21 1.21 0 0 0 0 1.72l1.28 1.28a1.2 1.2 0 0 0 1.72 0L21.64 5.36a1.2 1.2 0 0 0 0-1.72Z"/>');
+const TrendingUp=IC('<polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/>');
+const TrendingDown=IC('<polyline points="22 17 13.5 8.5 8.5 13.5 2 7"/><polyline points="16 17 22 17 22 11"/>');
+const MinusIc=IC('<path d="M5 12h14"/>');
+const TargetIc=IC('<circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/>');
+const Wallet=IC('<path d="M21 12V7H5a2 2 0 0 1 0-4h14v4"/><path d="M3 5v14a2 2 0 0 0 2 2h16v-5"/><path d="M18 12a2 2 0 0 0 0 4h4v-4Z"/>');
+const Clock=IC('<circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>');
+const CircleDashed=IC('<path d="M10.1 2.2a10 10 0 0 1 3.8 0"/><path d="M17.6 3.7a10 10 0 0 1 2.7 2.7"/><path d="M21.8 10.1a10 10 0 0 1 0 3.8"/><path d="M20.3 17.6a10 10 0 0 1-2.7 2.7"/><path d="M13.9 21.8a10 10 0 0 1-3.8 0"/><path d="M6.4 20.3a10 10 0 0 1-2.7-2.7"/><path d="M2.2 13.9a10 10 0 0 1 0-3.8"/><path d="M3.7 6.4a10 10 0 0 1 2.7-2.7"/>');
+const Activity=IC('<path d="M22 12h-4l-3 9L9 3l-3 9H2"/>');
+const Trophy=IC('<path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"/><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"/><path d="M4 22h16"/><path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22"/><path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22"/><path d="M18 2H6v7a6 6 0 0 0 12 0V2Z"/>');
+const CheckCircle2=IC('<circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/>');
+const Trash2=IC('<path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/>');
+const AlertTriangle=IC('<path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><path d="M12 9v4"/><path d="M12 17h.01"/>');
+const Layers=IC('<path d="m12.83 2.18a2 2 0 0 0-1.66 0L2.6 6.08a1 1 0 0 0 0 1.83l8.58 3.91a2 2 0 0 0 1.66 0l8.58-3.9a1 1 0 0 0 0-1.84Z"/><path d="m22 17.65-9.17 4.16a2 2 0 0 1-1.66 0L2 17.65"/><path d="m22 12.65-9.17 4.16a2 2 0 0 1-1.66 0L2 12.65"/>');
+const ChevronRight=IC('<path d="m9 18 6-6-6-6"/>');
+const ChevronDown=IC('<path d="m6 9 6 6 6-6"/>');
+const Table2=IC('<path d="M9 3H5a2 2 0 0 0-2 2v4m6-6h10a2 2 0 0 1 2 2v4M9 3v18m0 0h10a2 2 0 0 0 2-2V9M9 21H5a2 2 0 0 1-2-2V9m0 0h18"/>');
+const Settings2=IC('<path d="M20 7h-9"/><path d="M14 17H5"/><circle cx="17" cy="17" r="3"/><circle cx="7" cy="7" r="3"/>');
+const Check=IC('<polyline points="20 6 9 17 4 12"/>');
+const Gauge=IC('<path d="m12 14 4-4"/><path d="M3.34 19a10 10 0 1 1 17.32 0"/>');
+const Package=IC('<path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/>');
+const CalendarClock=IC('<path d="M21 7.5V6a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h3.5"/><path d="M16 2v4"/><path d="M8 2v4"/><path d="M3 10h5"/><circle cx="16" cy="16" r="6"/>');
+const BarChart3=IC('<path d="M3 3v18h18"/><path d="M18 17V9"/><path d="M13 17V5"/><path d="M8 17v-3"/>');
+const PieChartIc=IC('<path d="M21.21 15.89A10 10 0 1 1 8 2.83"/><path d="M22 12A10 10 0 0 0 12 2v10z"/>');
 
-/* === Reference data === */
+/* Reference data */
 const PLATFORMS={Facebook:"FB",Instagram:"IG",TikTok:"TT",YouTube:"YT",Google:"GG",CPAS:"CPAS",Lazada:"LZ"};
-const PLATFORM_BADGE={Facebook:"bg-blue-100 text-blue-700 ring-blue-200",Instagram:"bg-gradient-to-r from-fuchsia-100 to-pink-100 text-pink-700 ring-pink-200",TikTok:"bg-zinc-900 text-cyan-300 ring-zinc-700",YouTube:"bg-red-100 text-red-700 ring-red-200",Google:"bg-sky-100 text-sky-700 ring-sky-200",CPAS:"bg-orange-100 text-orange-700 ring-orange-200",Lazada:"bg-purple-100 text-purple-700 ring-purple-200"};
-const MEDIA_OBJECTIVES=["Reach","Impression","Video Views","Follow","Engagement","Traffic","Content View","Add to Cart","Purchase","GMVmax"];
+const PB={Facebook:"bg-blue-100 text-blue-700 ring-blue-200",Instagram:"bg-pink-100 text-pink-700 ring-pink-200",TikTok:"bg-zinc-900 text-cyan-300 ring-zinc-700",YouTube:"bg-red-100 text-red-700 ring-red-200",Google:"bg-sky-100 text-sky-700 ring-sky-200",CPAS:"bg-orange-100 text-orange-700 ring-orange-200",Lazada:"bg-purple-100 text-purple-700 ring-purple-200"};
+const MEDIA_OBJ=["Reach","Impression","Video Views","Follow","Engagement","Traffic","Content View","Add to Cart","Purchase","GMVmax"];
 const OPT_GOALS=["Reach","Impression","Video Views","15s VDO View","Follow","Engagement","Link Click","Content View","Add to Cart","Purchase"];
-const OBJ_ABBR={Reach:"Reach",Impression:"Imp","Video Views":"VDO",Follow:"Follow",Engagement:"Eng",Traffic:"Traffic","Content View":"CV","Add to Cart":"ATC",Purchase:"Purch",GMVmax:"GMVmax"};
+const OA={Reach:"Reach",Impression:"Imp","Video Views":"VDO",Follow:"Fol",Engagement:"Eng",Traffic:"Trf","Content View":"CV","Add to Cart":"ATC",Purchase:"Pur",GMVmax:"GMV"};
 const KOL_TIERS=["Mega","Macro","Micro","Nano","Brand","-"];
 const KOL_TYPES=["Brandframe","Review","Tutorial","Unboxing","Livestream","-"];
 const AUDIENCE_OPTS=["Prospect","Retargeting","Lookalike","Broad"];
 const TARGET_SPLITS=["Ad Group Level","Campaign Level"];
 const MONTHS=["January","February","March","April","May","June","July","August","September","October","November","December"];
-const MABBR={January:"Jan",February:"Feb",March:"Mar",April:"Apr",May:"May",June:"Jun",July:"Jul",August:"Aug",September:"Sep",October:"Oct",November:"Nov",December:"Dec"};
+const MA={January:"Jan",February:"Feb",March:"Mar",April:"Apr",May:"May",June:"Jun",July:"Jul",August:"Aug",September:"Sep",October:"Oct",November:"Nov",December:"Dec"};
 const YEARS=[2025,2026,2027,2028];
-const TINTS=[{badge:"bg-emerald-100 text-emerald-700 ring-emerald-200",dot:"bg-emerald-500"},{badge:"bg-violet-100 text-violet-700 ring-violet-200",dot:"bg-violet-500"},{badge:"bg-sky-100 text-sky-700 ring-sky-200",dot:"bg-sky-500"},{badge:"bg-amber-100 text-amber-700 ring-amber-200",dot:"bg-amber-500"},{badge:"bg-rose-100 text-rose-700 ring-rose-200",dot:"bg-rose-500"},{badge:"bg-teal-100 text-teal-700 ring-teal-200",dot:"bg-teal-500"},{badge:"bg-fuchsia-100 text-fuchsia-700 ring-fuchsia-200",dot:"bg-fuchsia-500"}];
-const hashIdx=(s,l)=>{let h=0;for(const c of(s||""))h=(h*31+c.charCodeAt(0))>>>0;return h%l};
-const BRAND_FIX={"Lolane Natura":TINTS[0],"Lolane Pro":TINTS[1]};
-const brandTint=b=>BRAND_FIX[b]||TINTS[hashIdx(b,TINTS.length)];
-const ct=s=>(s||"").replace(/[^a-zA-Z0-9-]/g,"");const dsh=s=>(s==="-"||!s)?"":s;
+const TINTS=[{b:"bg-emerald-100 text-emerald-700 ring-emerald-200",d:"bg-emerald-500"},{b:"bg-violet-100 text-violet-700 ring-violet-200",d:"bg-violet-500"},{b:"bg-sky-100 text-sky-700 ring-sky-200",d:"bg-sky-500"},{b:"bg-amber-100 text-amber-700 ring-amber-200",d:"bg-amber-500"},{b:"bg-rose-100 text-rose-700 ring-rose-200",d:"bg-rose-500"},{b:"bg-teal-100 text-teal-700 ring-teal-200",d:"bg-teal-500"}];
+const hx=(s,l)=>{let h=0;for(const c of(s||""))h=(h*31+c.charCodeAt(0))>>>0;return h%l};
+const BF={"Lolane Natura":TINTS[0],"Lolane Pro":TINTS[1]};
+const bt=b=>BF[b]||TINTS[hx(b,TINTS.length)];
+const ct=s=>(s||"").replace(/[^a-zA-Z0-9-]/g,"");
+const dsh=s=>(s==="-"||!s)?"":s;
 
-/* === Naming convention === */
+/* Naming */
 const campCore=r=>(r.noAwo?(r.awoCustom||"adhoc"):"AWO");
-function genCampaign(r){const mo=ct(MABBR[r.month]||r.month||"MM"),yr=(r.startDate||"2026").slice(0,4),obj=OBJ_ABBR[r.mediaObjective]||ct(r.mediaObjective),tag=r.creatorType==="Brand"?"Brand":"KOL";const p=[ct(r.brand),ct(r.product),campCore(r),tag];if(r.targetSplit==="Campaign Level")p.push(r.audience||"Prospect");p.push(obj,mo,yr);return p.join("_");}
-function genAdGroup(r){const mo=ct(MABBR[r.month]||r.month||"MM"),tier=dsh(r.kolTier),typ=dsh(r.kolType),obj=OBJ_ABBR[r.mediaObjective]||ct(r.mediaObjective),tTag=r.creatorType==="Brand"?"Brand":(typ?typ+"KOL":"KOL");const p=[mo,tTag,tier,ct(r.contentKol)];if(r.targetSplit==="Ad Group Level")p.push(r.audience||"Prospect");p.push(obj);return p.filter(Boolean).join("_");}
-function genAdName(r){const mo=ct(MABBR[r.month]||r.month||"MM"),tier=dsh(r.kolTier),typ=dsh(r.kolType),tTag=r.creatorType==="Brand"?"Brand":(typ?typ+"KOL":"KOL");return[mo,tTag,tier,ct(r.contentKol)].filter(Boolean).join("_");}
+function genCamp(r){const mo=ct(MA[r.month]||r.month||"MM"),yr=(r.startDate||"2026").slice(0,4),obj=OA[r.mediaObjective]||ct(r.mediaObjective),tag=r.creatorType==="Brand"?"Brand":"KOL";const p=[ct(r.brand),ct(r.product),campCore(r),tag];if(r.targetSplit==="Campaign Level")p.push(r.audience||"Prospect");p.push(obj,mo,yr);return p.join("_");}
+function genAG(r){const mo=ct(MA[r.month]||r.month||"MM"),tier=dsh(r.kolTier),typ=dsh(r.kolType),obj=OA[r.mediaObjective]||ct(r.mediaObjective),tT=r.creatorType==="Brand"?"Brand":(typ?typ+"KOL":"KOL");const p=[mo,tT,tier,ct(r.contentKol)];if(r.targetSplit==="Ad Group Level")p.push(r.audience||"Prospect");p.push(obj);return p.filter(Boolean).join("_");}
+function genAN(r){const mo=ct(MA[r.month]||r.month||"MM"),tier=dsh(r.kolTier),typ=dsh(r.kolType),tT=r.creatorType==="Brand"?"Brand":(typ?typ+"KOL":"KOL");return[mo,tT,tier,ct(r.contentKol)].filter(Boolean).join("_");}
 
-/* === Date/budget/status engine === */
-const DAY=864e5,parseD=s=>s?new Date(s+"T00:00:00"):null,diffD=(a,b)=>Math.round((a-b)/DAY);
+/* Date engine */
+const DAY=864e5,pD=s=>s?new Date(s+"T00:00:00"):null,dD=(a,b)=>Math.round((a-b)/DAY);
 const fmt=n=>(n==null||isNaN(n))?"—":"฿"+Math.round(n).toLocaleString();
-const fmt0=n=>"฿"+Math.round(n||0).toLocaleString();
+const f0=n=>"฿"+Math.round(n||0).toLocaleString();
 const pad=n=>String(n).padStart(2,"0");
-const addDaysF=(s,d)=>{const dt=parseD(s);dt.setDate(dt.getDate()+d);return`${dt.getFullYear()}-${pad(dt.getMonth()+1)}-${pad(dt.getDate())}`};
-const fmtDate=v=>{const d=parseD(v);return d?`${d.getDate()} ${MABBR[MONTHS[d.getMonth()]]} ${d.getFullYear()}`:"—"};
+const addDF=(s,d)=>{const dt=pD(s);dt.setDate(dt.getDate()+d);return`${dt.getFullYear()}-${pad(dt.getMonth()+1)}-${pad(dt.getDate())}`};
+const fD=v=>{const d=pD(v);return d?`${d.getDate()} ${MA[MONTHS[d.getMonth()]]} ${d.getFullYear()}`:"—"};
+const fDShort=v=>{const d=pD(v);return d?`${pad(d.getDate())}/${pad(d.getMonth()+1)}/${d.getFullYear()}`:"—"};
+const TODAY_DEFAULT="2026-06-22";
 
-function metrics(r,today){const s=parseD(r.startDate),e=parseD(r.endDate),exp=parseD(r.expiredDate);const totalDays=s&&e?Math.max(1,diffD(e,s)+1):1;let daysRun=0,runLabel="";if(!s){runLabel="No start";}else if(today<s){runLabel="No start";}else if(e&&today>e){daysRun=totalDays;runLabel=String(totalDays);}else{daysRun=diffD(today,s)+1;runLabel=String(daysRun);}const daysRemaining=e?(today>e?0:Math.max(0,diffD(e,today))):0;const dailyBudget=(Number(r.contentBudget)||0)/totalDays;const spent=dailyBudget*daysRun;const daysToExpire=exp?diffD(exp,today):null;const expired=daysToExpire!=null&&daysToExpire<0;const expiringSoon=daysToExpire!=null&&daysToExpire>=0&&daysToExpire<=3;let status;if(!r.contentKol||!r.startDate)status="Waiting";else if(s&&today<s)status="New";else if(e&&today>e)status="Complete";else status="Active";const target=Number(r.kpiTarget)||0,actual=r.actual==null?null:Number(r.actual);let perf=null;if(actual!=null&&target>0){const att=actual/target,tf=totalDays>0?daysRun/totalDays:0,pi=tf>0?att/tf:att>=1?2:0;perf={attain:att,paceIndex:pi};}return{totalDays,daysRun,runLabel,daysRemaining,dailyBudget,spent,daysToExpire,expired,expiringSoon,status,perf};}
-function campaignPace(rs){let tgt=0,act=0,run=0,tot=0,has=false;for(const r of rs){tgt+=Number(r.kpiTarget)||0;if(r.actual!=null){act+=Number(r.actual);has=true;}run+=r.m.daysRun;tot+=r.m.totalDays;}if(!has||tgt<=0)return null;const att=act/tgt,tf=tot>0?run/tot:0,pi=tf>0?att/tf:att>=1?2:0;const tone=pi>=1?"good":pi>=.8?"warn":"bad";return{attain:att,paceIndex:pi,label:tone==="good"?"On Track":tone==="warn"?"At Risk":"Behind",tone};}
-function aggStatus(rs){if(rs.some(r=>r.m.status==="Active"))return"Active";if(rs.some(r=>r.m.status==="New"))return"New";if(rs.every(r=>r.m.status==="Complete"))return"Complete";return"Waiting";}
-function aggDates(rs){let mn=null,mx=null;for(const r of rs){const s=parseD(r.startDate),e=parseD(r.endDate);if(s&&(!mn||s<mn))mn=s;if(e&&(!mx||e>mx))mx=e;}return{start:mn,end:mx};}
+function metrics(r,today){const s=pD(r.startDate),e=pD(r.endDate),exp=pD(r.expiredDate);const td=s&&e?Math.max(1,dD(e,s)+1):1;let dr=0,rl="";if(!s)rl="No start";else if(today<s)rl="No start";else if(e&&today>e){dr=td;rl=String(td);}else{dr=dD(today,s)+1;rl=String(dr);}const rem=e?(today>e?0:Math.max(0,dD(e,today))):0;const daily=(Number(r.contentBudget)||0)/td;const spent=daily*dr;const dte=exp?dD(exp,today):null;const expired=dte!=null&&dte<0;const expSoon=dte!=null&&dte>=0&&dte<=3;let status;if(!r.contentKol||!r.startDate)status="Waiting";else if(s&&today<s)status="New";else if(e&&today>e)status="Complete";else status="Active";const tgt=Number(r.kpiTarget)||0,act=r.actual==null?null:Number(r.actual);let perf=null;if(act!=null&&tgt>0){const att=act/tgt,tf=td>0?dr/td:0,pi=tf>0?att/tf:att>=1?2:0;perf={attain:att,paceIndex:pi};}return{totalDays:td,daysRun:dr,runLabel:rl,daysRemaining:rem,dailyBudget:daily,spent,daysToExpire:dte,expired,expiringSoon:expSoon,status,perf};}
+function campPace(rs){let t=0,a=0,r2=0,t2=0,h=false;for(const r of rs){t+=Number(r.kpiTarget)||0;if(r.actual!=null){a+=Number(r.actual);h=true;}r2+=r.m.daysRun;t2+=r.m.totalDays;}if(!h||t<=0)return null;const att=a/t,tf=t2>0?r2/t2:0,pi=tf>0?att/tf:att>=1?2:0;const tone=pi>=1?"good":pi>=.8?"warn":"bad";return{attain:att,paceIndex:pi,label:tone==="good"?"On Track":tone==="warn"?"At Risk":"Behind",tone};}
+function aggSt(rs){if(rs.some(r=>r.m.status==="Active"))return"Active";if(rs.some(r=>r.m.status==="New"))return"New";if(rs.every(r=>r.m.status==="Complete"))return"Complete";return"Waiting";}
 
-/* === Seed data === */
-const defaultAdGroup=obj=>obj==="Retargeting"?"Retargeting":obj==="Awareness"?"Broad":obj==="Engagement"?"Engagement":"Prospecting";
-const mkSeed=o=>({noAwo:false,awoCustom:"",equalSplit:false,totalCampaignBudget:0,reserveTotal:0,statusOverride:null,targetSplit:"Ad Group Level",creatorType:"KOL",audience:"Prospect",kpiResult:0,cpr:0,adGroup:defaultAdGroup(o.mediaObjective),...o});
+/* Seed */
+const dAG=obj=>obj==="Retargeting"?"Retargeting":"Prospecting";
+const mkS=o=>({noAwo:false,awoCustom:"",equalSplit:false,totalCampaignBudget:0,reserveTotal:0,statusOverride:null,targetSplit:"Ad Group Level",creatorType:"KOL",audience:"Prospect",kpiResult:0,cpr:0,adGroup:dAG(o.mediaObjective),...o});
 const seed=[
-  mkSeed({campaignId:"c1",brand:"Lolane Natura",product:"Glow Serum",targetSplit:"Campaign Level",contentKol:"MaiReviews",kolTier:"Macro",kolType:"Review",adPlatform:"TikTok",month:"June",mediaObjective:"Purchase",optimizationGoal:"Purchase",audience:"Prospect",expireCode:"LN-GLOW10",expiredDate:"2026-06-24",startDate:"2026-06-01",endDate:"2026-06-30",contentBudget:120000,budgetLimit:130000,reserveBudget:12000,kpiTarget:900000,actual:780000}),
-  mkSeed({campaignId:"c1",brand:"Lolane Natura",product:"Glow Serum",targetSplit:"Campaign Level",contentKol:"BeautyByNin",kolTier:"Micro",kolType:"Tutorial",adPlatform:"Instagram",month:"June",mediaObjective:"Video Views",optimizationGoal:"Video Views",audience:"Retargeting",expireCode:"LN-GLOW10",expiredDate:"2026-07-10",startDate:"2026-06-10",endDate:"2026-06-28",contentBudget:60000,budgetLimit:66000,reserveBudget:6000,kpiTarget:2500000,actual:3120000}),
-  mkSeed({campaignId:"c2",brand:"Lolane Natura",product:"Gentle Cleanser",contentKol:"SkinByLin",kolTier:"Micro",kolType:"Tutorial",adPlatform:"CPAS",month:"July",mediaObjective:"Reach",optimizationGoal:"Reach",audience:"Broad",expireCode:"LN-CLN5",expiredDate:"2026-08-01",startDate:"2026-07-05",endDate:"2026-07-31",contentBudget:50000,budgetLimit:55000,reserveBudget:5000,kpiTarget:4000000,actual:null}),
-  mkSeed({campaignId:"c3",brand:"Lolane Natura",product:"Daily Sunscreen",noAwo:true,awoCustom:"launch",contentKol:"UVqueen",kolTier:"Macro",kolType:"Unboxing",adPlatform:"YouTube",month:"July",mediaObjective:"Traffic",optimizationGoal:"Link Click",audience:"Prospect",expireCode:"LN-SUN8",expiredDate:"2026-07-20",startDate:"2026-07-01",endDate:"2026-07-25",contentBudget:80000,budgetLimit:85000,reserveBudget:8000,kpiTarget:600000,actual:null}),
-  mkSeed({campaignId:"c4",brand:"Lolane Pro",product:"Color Shield",targetSplit:"Ad Group Level",contentKol:"HairProTH",kolTier:"Macro",kolType:"Review",adPlatform:"Facebook",month:"June",mediaObjective:"Purchase",optimizationGoal:"Purchase",audience:"Prospect",expireCode:"LP-COL15",expiredDate:"2026-06-23",startDate:"2026-05-20",endDate:"2026-06-19",contentBudget:150000,budgetLimit:160000,reserveBudget:15000,kpiTarget:1200000,actual:1340000}),
-  mkSeed({campaignId:"c4",brand:"Lolane Pro",product:"Color Shield",targetSplit:"Ad Group Level",contentKol:"StyleTok",kolTier:"Micro",kolType:"Livestream",adPlatform:"CPAS",month:"June",mediaObjective:"Purchase",optimizationGoal:"Add to Cart",audience:"Retargeting",expireCode:"LP-COL15",expiredDate:"2026-06-30",startDate:"2026-06-12",endDate:"2026-06-29",contentBudget:90000,budgetLimit:95000,reserveBudget:10000,kpiTarget:800000,actual:410000}),
-  mkSeed({campaignId:"c5",brand:"Lolane Pro",product:"Daily Treatment",noAwo:true,awoCustom:"adhoc",creatorType:"Brand",contentKol:"HairGoals",kolTier:"-",kolType:"-",adPlatform:"YouTube",month:"July",mediaObjective:"Video Views",optimizationGoal:"Video Views",audience:"Broad",expireCode:"LP-TRT20",expiredDate:"2026-08-10",startDate:"2026-07-10",endDate:"2026-08-09",contentBudget:220000,budgetLimit:230000,reserveBudget:20000,kpiTarget:9000000,actual:null}),
+  mkS({campaignId:"c1",brand:"Lolane Natura",product:"Glow Serum",targetSplit:"Campaign Level",contentKol:"MaiReviews",kolTier:"Macro",kolType:"Review",adPlatform:"TikTok",month:"June",mediaObjective:"Purchase",optimizationGoal:"Purchase",audience:"Prospect",expireCode:"LN-GLOW10",expiredDate:"2026-06-24",startDate:"2026-06-01",endDate:"2026-06-30",contentBudget:118000,budgetLimit:130000,reserveBudget:12000,kpiTarget:900000,actual:780000,cpr:0.14}),
+  mkS({campaignId:"c1",brand:"Lolane Natura",product:"Glow Serum",targetSplit:"Campaign Level",contentKol:"BeautyByNin",kolTier:"Micro",kolType:"Tutorial",adPlatform:"Instagram",month:"June",mediaObjective:"Video Views",optimizationGoal:"Video Views",audience:"Retargeting",expireCode:"LN-GLOW10",expiredDate:"2026-07-10",startDate:"2026-06-10",endDate:"2026-06-28",contentBudget:54000,budgetLimit:60000,reserveBudget:6000,kpiTarget:2500000,actual:3120000,cpr:0.02}),
+  mkS({campaignId:"c2",brand:"Lolane Natura",product:"Gentle Cleanser",contentKol:"SkinByLin",kolTier:"Micro",kolType:"Tutorial",adPlatform:"CPAS",month:"July",mediaObjective:"Reach",optimizationGoal:"Reach",audience:"Broad",expireCode:"",expiredDate:"",startDate:"2026-07-05",endDate:"2026-07-31",contentBudget:45000,budgetLimit:50000,reserveBudget:5000,kpiTarget:4000000,actual:null,cpr:0.01}),
+  mkS({campaignId:"c3",brand:"Lolane Natura",product:"Daily Sunscreen",noAwo:true,awoCustom:"launch",contentKol:"UVqueen",kolTier:"Macro",kolType:"Unboxing",adPlatform:"YouTube",month:"July",mediaObjective:"Traffic",optimizationGoal:"Link Click",audience:"Prospect",expireCode:"",expiredDate:"",startDate:"",endDate:"",contentBudget:77000,budgetLimit:85000,reserveBudget:8000,kpiTarget:600000,actual:null,cpr:0.13}),
+  mkS({campaignId:"c4",brand:"Lolane Pro",product:"Color Shield",targetSplit:"Ad Group Level",contentKol:"HairProTH",kolTier:"Macro",kolType:"Review",adPlatform:"Facebook",month:"June",mediaObjective:"Purchase",optimizationGoal:"Purchase",audience:"Prospect",expireCode:"LP-COL15",expiredDate:"2026-06-23",startDate:"2026-05-20",endDate:"2026-06-19",contentBudget:145000,budgetLimit:160000,reserveBudget:15000,kpiTarget:1200000,actual:1340000,cpr:0.12}),
+  mkS({campaignId:"c4",brand:"Lolane Pro",product:"Color Shield",targetSplit:"Ad Group Level",contentKol:"StyleTok",kolTier:"Micro",kolType:"Livestream",adPlatform:"CPAS",month:"June",mediaObjective:"Purchase",optimizationGoal:"Add to Cart",audience:"Retargeting",expireCode:"LP-COL15",expiredDate:"2026-06-30",startDate:"2026-06-12",endDate:"2026-06-29",contentBudget:85000,budgetLimit:95000,reserveBudget:10000,kpiTarget:800000,actual:410000,cpr:0.11}),
+  mkS({campaignId:"c5",brand:"Lolane Pro",product:"Daily Treatment",noAwo:true,awoCustom:"adhoc",creatorType:"Brand",contentKol:"HairGoals",kolTier:"-",kolType:"-",adPlatform:"YouTube",month:"July",mediaObjective:"Video Views",optimizationGoal:"Video Views",audience:"Broad",expireCode:"",expiredDate:"",startDate:"2026-07-10",endDate:"2026-08-09",contentBudget:210000,budgetLimit:230000,reserveBudget:20000,kpiTarget:9000000,actual:null,cpr:0.02}),
 ];
 
-/* === UI Atoms === */
-const SS={Waiting:"bg-zinc-100 text-zinc-600 ring-zinc-200",New:"bg-sky-100 text-sky-700 ring-sky-200",Schedule:"bg-amber-100 text-amber-700 ring-amber-200",Active:"bg-indigo-100 text-indigo-700 ring-indigo-200",Complete:"bg-emerald-100 text-emerald-700 ring-emerald-200"};
-const SI={Waiting:CircleDashed,New:Clock,Schedule:CalendarClock,Active:Activity,Complete:CheckCircle2};
-function StatusPill({status}){const Ic=SI[status]||CircleDashed;return<span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold ring-1 ${SS[status]}`}><Ic size={11}/> {status}</span>;}
-const PS={good:"bg-emerald-100 text-emerald-700 ring-emerald-200",warn:"bg-amber-100 text-amber-700 ring-amber-200",bad:"bg-rose-100 text-rose-700 ring-rose-200"};
-const PI={good:TrendingUp,warn:Minus,bad:TrendingDown};
-function PaceBadge({perf,compact}){if(!perf)return<span className="text-[11px] text-zinc-400">No data</span>;const Ic=PI[perf.tone],bar=perf.tone==="good"?"bg-emerald-500":perf.tone==="warn"?"bg-amber-500":"bg-rose-500";return<div><span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold ring-1 ${PS[perf.tone]}`}><Ic size={11}/> {perf.label}</span>{!compact&&<div className="mt-1 flex items-center gap-1.5"><div className="h-1.5 w-14 overflow-hidden rounded-full bg-zinc-200"><div className={`h-full ${bar}`} style={{width:`${Math.min(100,perf.attain*100)}%`}}/></div><span className="tabular-nums text-[10px] text-zinc-500">{Math.round(perf.attain*100)}%</span></div>}</div>;}
-function Stat({icon:Ic,label,value,sub,accent,ring}){return<div className={`rounded-xl border bg-white p-4 shadow-sm hover:shadow-md ${ring}`}><div className="flex items-center gap-2 text-zinc-400"><Ic size={14} className={accent}/><span className="text-[11px] font-semibold uppercase tracking-wider">{label}</span></div><div className="mt-2 text-[21px] font-bold tabular-nums text-zinc-900">{value}</div>{sub&&<div className="mt-0.5 text-[11px] text-zinc-400">{sub}</div>}</div>;}
-const ED="w-full rounded-md bg-transparent px-1.5 py-1 text-[12px] tabular-nums text-current outline-none transition-colors hover:bg-white focus:bg-white focus:ring-1 focus:ring-indigo-300";
-function Inp({value,onChange,type="text",className="",placeholder}){return<input type={type} placeholder={placeholder} value={value??""}onChange={e=>onChange(type==="number"?Number(e.target.value):e.target.value)}className={`${ED} ${className}`}/>;}
-function Sel({value,onChange,options,className=""}){return<select value={value}onChange={e=>onChange(e.target.value)}className={`${ED} cursor-pointer ${className}`}>{options.map(o=><option key={o} value={o}>{o||"—"}</option>)}</select>;}
-function BadgeSel({value,onChange,options,bc}){return<select value={value}onChange={e=>onChange(e.target.value)}className={`cursor-pointer rounded-full px-2 py-0.5 text-[11px] font-semibold outline-none ring-1 focus:ring-2 focus:ring-indigo-300 ${bc}`}>{options.map(o=><option key={o} value={o} className="bg-white text-zinc-700">{o}</option>)}</select>;}
-function DateCell({value,onChange}){const[e,se]=useState(false);if(e||!value)return<input type="date" autoFocus={e} value={value??""}onChange={ev=>onChange(ev.target.value)}onBlur={()=>se(false)}className={ED}/>;return<button onClick={()=>se(true)}className="w-full rounded-md px-1.5 py-1 text-left text-[12px] text-current hover:bg-white">{fmtDate(value)}</button>;}
+/* UI Atoms */
+const SS={Waiting:"bg-zinc-100 text-zinc-600",New:"bg-sky-100 text-sky-700",Schedule:"bg-amber-100 text-amber-700",Active:"bg-indigo-100 text-indigo-700",Complete:"bg-emerald-100 text-emerald-700"};
+const SIcon={Waiting:CircleDashed,New:Clock,Schedule:CalendarClock,Active:Activity,Complete:CheckCircle2};
+const SPill=({s})=>{const I=SIcon[s]||CircleDashed;return<span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold ring-1 ring-current/20 ${SS[s]}`}><I size={11}/>{s}</span>;};
+const PS={good:"bg-emerald-100 text-emerald-700",warn:"bg-amber-100 text-amber-700",bad:"bg-rose-100 text-rose-700"};
+const PIc={good:TrendingUp,warn:MinusIc,bad:TrendingDown};
+const PBadge=({p,compact})=>{if(!p)return<span className="text-[11px] text-zinc-400">—</span>;const I=PIc[p.tone],bar=p.tone==="good"?"bg-emerald-500":p.tone==="warn"?"bg-amber-500":"bg-rose-500";return<div><span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold ring-1 ring-current/20 ${PS[p.tone]}`}><I size={11}/>{p.label}</span>{!compact&&<div className="mt-1 flex items-center gap-1"><div className="h-1.5 w-12 rounded-full bg-zinc-200 overflow-hidden"><div className={`h-full ${bar}`} style={{width:`${Math.min(100,p.attain*100)}%`}}/></div><span className="text-[10px] tabular-nums text-zinc-500">{Math.round(p.attain*100)}%</span></div>}</div>;};
+const Stat=({icon:I,label,value,sub,accent,ring})=><div className={`rounded-xl border bg-white p-4 shadow-sm hover:shadow-md ${ring}`}><div className="flex items-center gap-2 text-zinc-400"><I size={14} className={accent}/><span className="text-[11px] font-semibold uppercase tracking-wider">{label}</span></div><div className="mt-2 text-xl font-bold tabular-nums text-zinc-900">{value}</div>{sub&&<div className="mt-0.5 text-[11px] text-zinc-400">{sub}</div>}</div>;
+const ED="w-full rounded-md bg-transparent px-1.5 py-1 text-[12px] tabular-nums text-current outline-none hover:bg-white focus:bg-white focus:ring-1 focus:ring-indigo-300";
+const Inp=({value,onChange,type="text",className="",placeholder})=><input type={type} placeholder={placeholder} value={value??""}onChange={e=>onChange(type==="number"?Number(e.target.value):e.target.value)}className={`${ED} ${className}`}/>;
+const Sel=({value,onChange,options})=><select value={value}onChange={e=>onChange(e.target.value)}className={`${ED} cursor-pointer`}>{options.map(o=><option key={o} value={o}>{o||"—"}</option>)}</select>;
+const BSel=({value,onChange,options,bc})=><select value={value}onChange={e=>onChange(e.target.value)}className={`cursor-pointer rounded-full px-2 py-0.5 text-[11px] font-semibold outline-none ring-1 ring-current/20 ${bc}`}>{options.map(o=><option key={o} value={o} className="bg-white text-zinc-700">{o}</option>)}</select>;
+const DCell=({value,onChange})=>{const[e,se]=useState(false);if(!value&&!e)return<span className="text-[11px] text-zinc-300 px-1.5">—</span>;if(e||!value)return<input type="date" autoFocus={e} value={value??""}onChange={ev=>onChange(ev.target.value)}onBlur={()=>se(false)}className={ED}/>;return<button onClick={()=>se(true)}className="rounded-md px-1.5 py-1 text-left text-[12px] text-current hover:bg-white">{fD(value)}</button>;};
 const CL="bg-indigo-50/40";
 
+/* Donut Chart */
+function Donut({data,title,size=130}){const total=data.reduce((s,d)=>s+d.value,0);if(!total)return null;const colors=["#4f46e5","#0ea5e9","#10b981","#f59e0b","#ef4444","#8b5cf6","#14b8a6","#ec4899","#f97316","#6366f1"];const r=size/2-14,circ=2*Math.PI*r;let cum=0;const segs=data.filter(d=>d.value>0).map((d,i)=>{const pct=d.value/total;const off=cum;cum+=pct;return{...d,pct,off,color:colors[i%colors.length]};});return<div className="flex flex-col items-center"><svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}><circle cx={size/2} cy={size/2} r={r} fill="none" stroke="#f4f4f5" strokeWidth={18}/>{segs.map((s,i)=><circle key={i} cx={size/2} cy={size/2} r={r} fill="none" stroke={s.color} strokeWidth={18} strokeDasharray={`${s.pct*circ} ${circ}`} strokeDashoffset={-s.off*circ} transform={`rotate(-90 ${size/2} ${size/2})`} strokeLinecap="round"/>)}<text x={size/2} y={size/2} textAnchor="middle" dominantBaseline="central" className="text-[13px] font-bold fill-zinc-700">{f0(total)}</text></svg><p className="mt-1 text-[12px] font-semibold text-zinc-700">{title}</p><div className="flex flex-wrap justify-center gap-x-3 gap-y-1 mt-1.5">{segs.map((s,i)=><span key={i} className="flex items-center gap-1 text-[10px] text-zinc-500"><span style={{background:s.color}} className="w-2 h-2 rounded-full shrink-0"/>{s.name} {Math.round(s.pct*100)}%</span>)}</div></div>;}
+
 /* ================================================================ */
-/*  Main App                                                         */
+/*  MAIN APP                                                         */
 /* ================================================================ */
 function App(){
-  const[rows,setRows]=useState([]);
-  const[loading,setLoading]=useState(true);
-  const[brandList,setBrandList]=useState(["Lolane Natura","Lolane Pro"]);
-  const[extraProducts,setExtraProducts]=useState([]);
-  const[today,setToday]=useState("2026-06-22");
+  const[rows,setRows]=useState([]);const[loading,setLoading]=useState(true);
+  const[brandList]=useState(["Lolane Natura","Lolane Pro"]);
+  const[extraProducts,setEP]=useState([]);
+  const today=TODAY_DEFAULT;const todayD=pD(today);
   const[brand,setBrand]=useState("Lolane Natura");
-  const[view,setView]=useState("monthly");
-  const[sub,setSub]=useState("All");
-  const[query,setQuery]=useState("");
-  const[sort,setSort]=useState({key:null,dir:1});
-  const[imported,setImported]=useState(false);
-  const[importDate,setImportDate]=useState(null);
-  const[showForm,setShowForm]=useState(false);
-  const[editRow,setEditRow]=useState(null);
-  const[addingBrand,setAddingBrand]=useState(false);
-  const[newBrand,setNewBrand]=useState("");
-  const[collapsed,setCollapsed]=useState(new Set());
+  const[activeTab,setActiveTab]=useState("data"); // "data" | "summary"
+  const[view,setView]=useState("monthly");const[sub,setSub]=useState("All");const[query,setQuery]=useState("");
+  const[imported,setImported]=useState(false);const[importDate,setImportDate]=useState(null);
+  const[showForm,setShowForm]=useState(false);const[editRow,setEditRow]=useState(null);
+  const[collapsed,setCollapsed]=useState(new Set());const[addingBrand,setAddingBrand2]=useState(false);const[newBrand,setNewBrand2]=useState("");
 
-  /* ---- Firestore real-time sync ---- */
-  useEffect(()=>{
-    let unsub;
-    const init=async()=>{
-      try{
-        const snap=await db.collection(COL).get();
-        if(snap.empty){
-          const batch=db.batch();
-          seed.forEach(row=>{const ref=db.collection(COL).doc();batch.set(ref,sanitize(row));});
-          await batch.commit();
-          console.log("Seeded Firestore with",seed.length,"rows");
-        }
-        unsub=db.collection(COL).onSnapshot(snapshot=>{
-          const data=snapshot.docs.map(doc=>fromDoc(doc));
-          setRows(data);
-          setLoading(false);
-        },err=>{console.error("Firestore listener error:",err);setLoading(false);});
-      }catch(err){console.error("Firestore init error:",err);setLoading(false);}
-    };
-    init();
-    return()=>{if(unsub)unsub();};
-  },[]);
+  useEffect(()=>{let u;const init=async()=>{try{const snap=await db.collection(COL).get();if(snap.empty){const b=db.batch();seed.forEach(r=>{b.set(db.collection(COL).doc(),sanitize(r));});await b.commit();}u=db.collection(COL).onSnapshot(sn=>{setRows(sn.docs.map(d=>fromDoc(d)));setLoading(false);},e=>{console.error(e);setLoading(false);});}catch(e){console.error(e);setLoading(false);}};init();return()=>u&&u();},[]);
 
-  const todayD=parseD(today);
-
-  /* ---- Firestore mutations ---- */
-  const upd=(id,patch)=>{
-    setRows(rs=>rs.map(r=>r.id===id?{...r,...patch}:r));
-    db.collection(COL).doc(id).update(sanitize(patch)).catch(e=>console.error("upd err:",e));
-  };
-
-  const del=async(id)=>{
-    const target=rows.find(r=>r.id===id);if(!target)return;
-    const batch=db.batch();
-    batch.delete(db.collection(COL).doc(id));
-    if(target.equalSplit&&target.campaignId){
-      const sibs=rows.filter(r=>r.id!==id&&r.campaignId===target.campaignId);
-      if(sibs.length>0){const per=Math.round((target.totalCampaignBudget-target.reserveTotal)/sibs.length),rp=Math.round(target.reserveTotal/sibs.length);sibs.forEach(r=>batch.update(db.collection(COL).doc(r.id),{contentBudget:per,reserveBudget:rp,budgetLimit:Math.round(per*1.1)}));}
-    }
-    await batch.commit();
-  };
-
-  const importPerf=async()=>{
-    const batch=db.batch();let any=false;
-    rows.forEach(r=>{const m=metrics(r,todayD);if(r.actual!=null||m.status==="Waiting"||m.status==="New")return;const f=Math.min(1,m.daysRun/m.totalDays);const actual=Math.round((Number(r.kpiTarget)||0)*f*(.45+Math.random()*.9));batch.update(db.collection(COL).doc(r.id),{actual});any=true;});
-    if(any)await batch.commit();
-    setImported(true);setImportDate(today);
-  };
-
-  const addRows=async(newRows,added)=>{
-    if(added&&!productsFor(added.brand).includes(added.product))setExtraProducts(p=>[...p,added]);
-    const batch=db.batch();
-    newRows.forEach(row=>{const ref=db.collection(COL).doc();batch.set(ref,sanitize(row));});
-    await batch.commit();
-    setShowForm(false);
-  };
-
+  const upd=(id,patch)=>{setRows(rs=>rs.map(r=>r.id===id?{...r,...patch}:r));db.collection(COL).doc(id).update(sanitize(patch)).catch(console.error);};
+  const del=async id=>{const t=rows.find(r=>r.id===id);if(!t)return;const b=db.batch();b.delete(db.collection(COL).doc(id));if(t.equalSplit&&t.campaignId){const sibs=rows.filter(r=>r.id!==id&&r.campaignId===t.campaignId);if(sibs.length>0){const per=Math.round((t.totalCampaignBudget-t.reserveTotal)/sibs.length),rp=Math.round(t.reserveTotal/sibs.length);sibs.forEach(r=>b.update(db.collection(COL).doc(r.id),{contentBudget:per,reserveBudget:rp,budgetLimit:Math.round(per*1.1)}));}}await b.commit();};
+  const importPerf=async()=>{const b=db.batch();let any=false;rows.forEach(r=>{const m=metrics(r,todayD);if(r.actual!=null||m.status==="Waiting"||m.status==="New")return;const f=Math.min(1,m.daysRun/m.totalDays);b.update(db.collection(COL).doc(r.id),{actual:Math.round((Number(r.kpiTarget)||0)*f*(.45+Math.random()*.9))});any=true;});if(any)await b.commit();setImported(true);setImportDate(today);};
+  const addRows=async(nr,added)=>{if(added&&!productsFor(added.brand).includes(added.product))setEP(p=>[...p,added]);const b=db.batch();nr.forEach(r=>{b.set(db.collection(COL).doc(),sanitize(r));});await b.commit();setShowForm(false);};
+  const addSubContent=async(templateRow)=>{const campRows=rows.filter(r=>r.campaignId===templateRow.campaignId);const totalBudget=campRows.reduce((s,r)=>s+(Number(r.contentBudget)||0),0);const limit=Number(templateRow.budgetLimit)||0;if(totalBudget>=limit){alert("Cannot save because the budget exceeds the limit.");return;}const newRow=mkS({...templateRow,contentKol:"",actual:null,contentBudget:0,id:undefined});delete newRow.id;await db.collection(COL).add(sanitize(newRow));};
   const tog=k=>setCollapsed(s=>{const n=new Set(s);n.has(k)?n.delete(k):n.add(k);return n;});
+  const confirmBrand=()=>{const n=newBrand.trim();if(!n){setAddingBrand2(false);setNewBrand2("");return;}setBrand(n);setSub("All");setNewBrand2("");setAddingBrand2(false);};
 
   const allBrands=useMemo(()=>Array.from(new Set([...brandList,...rows.map(r=>r.brand)])),[brandList,rows]);
-  const brands=useMemo(()=>["All Brands",...allBrands],[allBrands]);
   const productsFor=b=>{const fr=rows.filter(r=>r.brand===b).map(r=>r.product);const fe=extraProducts.filter(p=>p.brand===b).map(p=>p.product);return Array.from(new Set([...fr,...fe])).filter(Boolean);};
-  const onAddProd=(b,n)=>setExtraProducts(p=>[...p,{brand:b,product:n}]);
-  const confirmBrand=()=>{const n=newBrand.trim();if(!n||allBrands.includes(n)){setAddingBrand(false);setNewBrand("");return;}setBrandList(b=>[...b,n]);setBrand(n);setSub("All");setNewBrand("");setAddingBrand(false);};
-
-  const brandRows=useMemo(()=>rows.filter(r=>brand==="All Brands"||r.brand===brand),[rows,brand]);
-  const subTabs=useMemo(()=>{const dim=view==="monthly"?"month":"product";const vals=Array.from(new Set(brandRows.map(r=>r[dim]||"—")));if(view==="monthly")vals.sort((a,b)=>(MONTHS.indexOf(a)-MONTHS.indexOf(b))||a.localeCompare(b));else vals.sort();return["All",...vals];},[brandRows,view]);
+  const brandRows=useMemo(()=>rows.filter(r=>r.brand===brand),[rows,brand]);
+  const subTabs=useMemo(()=>{const dim=view==="monthly"?"month":"product";const v=Array.from(new Set(brandRows.map(r=>r[dim]||"—")));if(view==="monthly")v.sort((a,b)=>(MONTHS.indexOf(a)-MONTHS.indexOf(b))||a.localeCompare(b));else v.sort();return["All",...v];},[brandRows,view]);
   const effSub=subTabs.includes(sub)?sub:"All";
-  const filtered=useMemo(()=>{const dim=view==="monthly"?"month":"product";let o=brandRows.filter(r=>effSub==="All"||(r[dim]||"—")===effSub);if(query.trim()){const q=query.toLowerCase();o=o.filter(r=>[r.brand,r.product,r.contentKol,r.adPlatform,campCore(r),genCampaign(r)].join(" ").toLowerCase().includes(q));}return o.map(r=>({...r,m:metrics(r,todayD)}));},[brandRows,view,effSub,query,today]);
-  const nested=useMemo(()=>{const ok=view==="monthly"?"product":"month";const om=new Map();for(const r of filtered){const k=r[ok]||"—";if(!om.has(k))om.set(k,new Map());const cm=om.get(k);const ck=genCampaign(r);if(!cm.has(ck))cm.set(ck,[]);cm.get(ck).push(r);}let outers=Array.from(om.entries());if(view==="monthly")outers.sort((a,b)=>a[0].localeCompare(b[0]));else outers.sort((a,b)=>(MONTHS.indexOf(a[0])-MONTHS.indexOf(b[0]))||a[0].localeCompare(b[0]));return outers.map(([k,cm])=>[k,Array.from(cm.entries()).sort((a,b)=>a[0].localeCompare(b[0]))]);},[filtered,view]);
+  const filtered=useMemo(()=>{const dim=view==="monthly"?"month":"product";let o=brandRows.filter(r=>effSub==="All"||(r[dim]||"—")===effSub);if(query.trim()){const q=query.toLowerCase();o=o.filter(r=>[r.brand,r.product,r.contentKol,r.adPlatform,campCore(r),genCamp(r)].join(" ").toLowerCase().includes(q));}return o.map(r=>({...r,m:metrics(r,todayD)}));},[brandRows,view,effSub,query]);
+  const nested=useMemo(()=>{const ok=view==="monthly"?"product":"month";const om=new Map();for(const r of filtered){const k=r[ok]||"—";if(!om.has(k))om.set(k,new Map());const cm=om.get(k);const ck=genCamp(r);if(!cm.has(ck))cm.set(ck,[]);cm.get(ck).push(r);}let outers=Array.from(om.entries());if(view==="monthly")outers.sort((a,b)=>a[0].localeCompare(b[0]));else outers.sort((a,b)=>(MONTHS.indexOf(a[0])-MONTHS.indexOf(b[0]))||a[0].localeCompare(b[0]));return outers.map(([k,cm])=>[k,Array.from(cm.entries()).sort((a,b)=>a[0].localeCompare(b[0]))]);},[filtered,view]);
   const totals=useMemo(()=>{const t={adm:0,spent:0,limit:0,reserve:0,active:0,alerts:0};for(const r of filtered){t.adm+=Number(r.contentBudget)||0;t.spent+=r.m.spent||0;t.limit+=Number(r.budgetLimit)||0;t.reserve+=Number(r.reserveBudget)||0;if(r.m.status==="Active")t.active++;if(r.m.expired||r.m.expiringSoon)t.alerts++;}return t;},[filtered]);
-  const insights=useMemo(()=>{if(!imported)return[];const live=filtered.filter(r=>r.m.perf&&r.m.status!=="Waiting");const donors=live.filter(r=>r.m.perf.paceIndex>=1.15).sort((a,b)=>b.m.perf.attain-a.m.perf.attain);const needers=live.filter(r=>r.m.perf.paceIndex<.85&&r.m.status==="Active").sort((a,b)=>a.m.perf.paceIndex-b.m.perf.paceIndex);const out=[];for(let i=0;i<Math.min(donors.length,needers.length);i++){const d=donors[i],r=needers[i];const sh=Math.round(Math.min(Math.max(0,Number(d.reserveBudget)||0),(Number(r.contentBudget)||0)*.2)/1e3)*1e3;if(sh<=0)continue;out.push({tone:"shift",text:`${d.contentKol} (${d.product}) pacing at ${Math.round(d.m.perf.attain*100)}%. Reallocate ${fmt(sh)} into ${r.contentKol} (${r.product}) — ${Math.round(r.m.perf.attain*100)}% attained.`});}for(const r of filtered.filter(x=>x.m.expiringSoon||x.m.expired))out.push({tone:r.m.expired?"alert":"warn",text:r.m.expired?`Promo ${r.expireCode||r.product} expired ${Math.abs(r.m.daysToExpire)}d ago.`:`Promo ${r.expireCode||r.product} expires in ${r.m.daysToExpire}d.`});if(out.length===0)out.push({tone:"ok",text:"All campaigns pacing within target bands."});return out;},[imported,filtered]);
+  const insights=useMemo(()=>{if(!imported)return[];const live=filtered.filter(r=>r.m.perf);const donors=live.filter(r=>r.m.perf.paceIndex>=1.15).sort((a,b)=>b.m.perf.attain-a.m.perf.attain);const needers=live.filter(r=>r.m.perf.paceIndex<.85&&r.m.status==="Active").sort((a,b)=>a.m.perf.paceIndex-b.m.perf.paceIndex);const out=[];for(let i=0;i<Math.min(donors.length,needers.length);i++){const d=donors[i],r=needers[i];const sh=Math.round(Math.min(Number(d.reserveBudget)||0,(Number(r.contentBudget)||0)*.2)/1e3)*1e3;if(sh>0)out.push({tone:"shift",text:`${d.contentKol} pacing at ${Math.round(d.m.perf.attain*100)}%. Shift ${fmt(sh)} into ${r.contentKol} (${Math.round(r.m.perf.attain*100)}% attained).`});}for(const r of filtered.filter(x=>x.m.expired))out.push({tone:"alert",text:`Promo ${r.expireCode||r.product} expired ${Math.abs(r.m.daysToExpire)}d ago.`});if(!out.length)out.push({tone:"ok",text:"All campaigns on track."});return out;},[imported,filtered]);
 
-  const SB=({k,children})=>{const a=sort.key===k;const Ic=!a?ArrowUpDown:sort.dir===1?ArrowUp:ArrowDown;return<button onClick={()=>setSort(s=>({key:k,dir:s.key===k?-s.dir:1}))}className={`inline-flex items-center gap-1 ${a?"text-indigo-600":"text-inherit hover:text-zinc-700"}`}>{children}<Ic size={11}/></button>;};
-  const Th=({children,className="",k})=><th className={`whitespace-nowrap px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-wider ${className}`}>{k?<SB k={k}>{children}</SB>:children}</th>;
-  const pivotLbl=view==="monthly"?"Product":"Month";
-  const StatusCell=({r})=>{if(r.m.status==="New"){const v=r.statusOverride==="Schedule"?"Schedule":"New";return<select value={v}onChange={e=>upd(r.id,{statusOverride:e.target.value==="Schedule"?"Schedule":null})}className={`cursor-pointer rounded-full px-2 py-0.5 text-[11px] font-semibold outline-none ring-1 ${SS[v]}`}><option value="New">New</option><option value="Schedule">Schedule</option></select>;}return<StatusPill status={r.m.status}/>;};
-  const ActualCell=({r})=>{if(r.actual==null)return<span className="text-[11px] text-zinc-400 italic">No data</span>;return<div><Inp type="number" value={r.actual} onChange={v=>upd(r.id,{actual:v})} className="text-right"/>{importDate&&<div className="text-[9px] text-zinc-400 text-right">Updated: {fmtDate(importDate)}</div>}</div>;};
-  let rowNo=0;const OuterIc=view==="monthly"?Package:CalendarRange;
+  /* Donut chart data */
+  const donutData=useMemo(()=>{const byKey=(key)=>{const m=new Map();filtered.forEach(r=>{const k=r[key]||"—";m.set(k,(m.get(k)||0)+(Number(r.contentBudget)||0));});return Array.from(m.entries()).map(([name,value])=>({name,value})).sort((a,b)=>b.value-a.value);};const byCampType=()=>{const m=new Map();filtered.forEach(r=>{const k=campCore(r);m.set(k,(m.get(k)||0)+(Number(r.contentBudget)||0));});return Array.from(m.entries()).map(([name,value])=>({name,value}));};return{d1:view==="monthly"?byKey("product"):byKey("month"),d2:byKey("adPlatform"),d3:byKey("mediaObjective"),d4:byCampType()};},[filtered,view]);
 
-  const SummaryRow=({rs,level,label,onToggle})=>{const d=aggDates(rs),st=aggStatus(rs),cLim=rs.reduce((s,r)=>s+(Number(r.budgetLimit)||0),0),cRes=rs.reduce((s,r)=>s+(Number(r.reserveBudget)||0),0),cSpent=rs.reduce((s,r)=>s+(r.m.spent||0),0),isCamp=level==="campaign",cActual=isCamp?rs.reduce((s,r)=>s+(r.actual!=null?Number(r.actual):0),0):null,cTarget=isCamp?rs.reduce((s,r)=>s+(Number(r.kpiTarget)||0),0):null,cPace=isCamp?campaignPace(rs):null,bg=level==="outer"?"bg-zinc-100/90":"bg-gradient-to-r from-indigo-50/70 to-white";return(<tr className={`border-b border-zinc-200 ${bg}`}><td className={`px-3 py-2 ${level==="campaign"?"pl-8":""}`}><button onClick={onToggle} className="flex items-center gap-2 text-zinc-700 hover:bg-white rounded-md px-1.5 py-0.5"><ChevronRight size={15}/>{level==="outer"&&<OuterIc size={14} className={view==="monthly"?"text-emerald-500":"text-amber-500"}/>}<span className="text-[13px] font-bold text-zinc-900 truncate max-w-[200px]">{label}</span><span className="text-[11px] text-zinc-400">{rs.length}r</span></button></td><td/><td/><td/><td/><td/><td/><td/><td/><td/><td className={`px-3 py-2 ${CL}`}><StatusPill status={st}/></td><td className="px-2 py-2 text-[12px]">{d.start?fmtDate(d.start.toISOString().slice(0,10)):"—"}</td><td className="px-2 py-2 text-[12px]">{d.end?fmtDate(d.end.toISOString().slice(0,10)):"—"}</td><td/><td/><td/><td className="px-2 py-2 text-right text-[12px] font-semibold tabular-nums">{fmt(cLim)}</td><td className="px-2 py-2 text-right text-[12px] tabular-nums">{fmt(cRes)}</td><td/><td/><td className={`px-2 py-2 text-right text-[12px] font-semibold tabular-nums ${CL}`}>{fmt(cSpent)}</td>{isCamp?<td className="px-2 py-2 text-right text-[12px] tabular-nums">{cActual!=null?fmt(cActual):"—"}</td>:<td/>}{isCamp?<td className="px-2 py-2 text-right text-[12px] tabular-nums">{cTarget?fmt(cTarget):"—"}</td>:<td/>}{isCamp?<td className={`px-3 py-2 ${CL}`}><PaceBadge perf={cPace} compact/></td>:<td/>}</tr>);};
+  const hasActuals=rows.some(r=>r.actual!=null);
+  let rowNo=0;const OIc=view==="monthly"?Package:CalendarRange;
+  const Th=({children,className=""})=><th className={`whitespace-nowrap px-2 py-2 text-left text-[10px] font-semibold uppercase tracking-wider ${className}`}>{children}</th>;
 
-  if(loading)return<div className="flex items-center justify-center min-h-screen bg-zinc-50"><div className="text-center"><div className="inline-block h-10 w-10 animate-spin rounded-full border-4 border-indigo-200 border-t-indigo-600"/><p className="mt-4 text-[14px] font-medium text-zinc-600">Connecting to Firestore…</p><p className="mt-1 text-[12px] text-zinc-400">my-budget-planner-230669</p></div></div>;
+  if(loading)return<div className="flex items-center justify-center min-h-screen bg-zinc-50"><div className="text-center"><div className="inline-block h-10 w-10 ani-spin rounded-full border-4 border-indigo-200 border-t-indigo-600"/><p className="mt-4 text-[14px] font-medium text-zinc-600">Connecting to Firestore…</p></div></div>;
 
   return(
     <div className="min-h-screen bg-gradient-to-b from-zinc-50 to-white font-sans text-zinc-800">
+      {/* Header — no date picker */}
       <header className="sticky top-0 z-30 border-b border-zinc-200 bg-white/85 backdrop-blur-xl">
-        <div className="mx-auto flex max-w-[1700px] flex-wrap items-center gap-3 px-6 py-3">
-          <div className="flex items-center gap-2.5"><div className="grid h-8 w-8 place-items-center rounded-lg bg-gradient-to-br from-indigo-500 via-violet-500 to-fuchsia-500 text-white shadow-sm"><Layers size={17}/></div><div><h1 className="bg-gradient-to-r from-indigo-600 to-violet-600 bg-clip-text text-[14px] font-bold leading-tight tracking-tight text-transparent">Media Budget &amp; Performance</h1><p className="text-[11px] text-zinc-400">Plan · Pace · Reallocate <span className="ml-1 inline-flex items-center gap-1 rounded-full bg-emerald-50 px-1.5 py-0.5 text-[9px] font-semibold text-emerald-600 ring-1 ring-emerald-200">● Firestore</span></p></div></div>
-          <div className="ml-auto flex flex-wrap items-center gap-2">
-            <label className="flex items-center gap-1.5 rounded-lg border border-zinc-200 bg-white px-2.5 py-1.5 text-[13px] shadow-sm"><CalendarDays size={14} className="text-zinc-400"/><input type="date" value={today} onChange={e=>setToday(e.target.value)} className="bg-transparent font-medium outline-none"/></label>
+        <div className="mx-auto flex max-w-[1700px] items-center gap-3 px-6 py-3">
+          <div className="flex items-center gap-2.5"><div className="grid h-8 w-8 place-items-center rounded-lg bg-gradient-to-br from-indigo-500 to-fuchsia-500 text-white"><Layers size={17}/></div><div><h1 className="bg-gradient-to-r from-indigo-600 to-violet-600 bg-clip-text text-[14px] font-bold tracking-tight text-transparent">Media Budget &amp; Performance</h1><p className="text-[11px] text-zinc-400">Plan · Pace · Reallocate <span className="ml-1 rounded-full bg-emerald-50 px-1.5 py-0.5 text-[9px] font-semibold text-emerald-600 ring-1 ring-emerald-200">● Live</span></p></div></div>
+          <div className="ml-auto flex items-center gap-2">
             <button onClick={importPerf} className="flex items-center gap-1.5 rounded-lg border border-zinc-200 bg-white px-3 py-1.5 text-[13px] font-medium shadow-sm hover:bg-zinc-50"><Upload size={14}/> Import performance</button>
             <button onClick={()=>setShowForm(true)} className="flex items-center gap-1.5 rounded-lg bg-gradient-to-r from-indigo-600 to-violet-600 px-3 py-1.5 text-[13px] font-medium text-white shadow-sm hover:opacity-90"><Plus size={14}/> New campaign</button>
           </div>
         </div>
+        {/* Brand tabs + Summary tab */}
         <div className="mx-auto flex max-w-[1700px] items-center gap-1 overflow-x-auto px-6">
-          {brands.map(b=>{const t=b==="All Brands"?null:brandTint(b);return<button key={b} onClick={()=>{setBrand(b);setSub("All");}}className={`relative flex items-center gap-1.5 whitespace-nowrap px-3 py-2.5 text-[13px] font-medium ${brand===b?"text-indigo-600":"text-zinc-500 hover:text-zinc-800"}`}>{t&&<span className={`h-2 w-2 rounded-full ${t.dot}`}/>}{b}{brand===b&&<span className="absolute inset-x-2 -bottom-px h-0.5 rounded-full bg-indigo-600"/>}</button>;})}
-          {addingBrand?<div className="flex items-center gap-1 py-1.5"><input autoFocus value={newBrand} onChange={e=>setNewBrand(e.target.value)} onKeyDown={e=>{if(e.key==="Enter")confirmBrand();if(e.key==="Escape"){setAddingBrand(false);setNewBrand("");}}} placeholder="New brand" className="w-36 rounded-md border border-indigo-300 px-2 py-1 text-[13px] outline-none"/><button onClick={confirmBrand} className="grid h-7 w-7 place-items-center rounded-md bg-indigo-600 text-white"><Check size={14}/></button><button onClick={()=>{setAddingBrand(false);setNewBrand("");}} className="grid h-7 w-7 place-items-center rounded-md border border-zinc-200 text-zinc-400"><XIcon size={14}/></button></div>:<button onClick={()=>setAddingBrand(true)} className="ml-1 grid h-7 w-7 shrink-0 place-items-center rounded-md border border-dashed border-zinc-300 text-zinc-400 hover:border-indigo-300 hover:text-indigo-600"><Plus size={15}/></button>}
+          {/* Summary and Forecast tab */}
+          <button onClick={()=>{setActiveTab("summary");}} className={`relative whitespace-nowrap px-3 py-2.5 text-[13px] font-medium flex items-center gap-1.5 ${activeTab==="summary"?"text-indigo-600":"text-zinc-500 hover:text-zinc-800"}`}><BarChart3 size={14}/>Summary & Forecast{activeTab==="summary"&&<span className="absolute inset-x-2 -bottom-px h-0.5 rounded-full bg-indigo-600"/>}</button>
+          <span className="mx-1 h-4 w-px bg-zinc-200"/>
+          {allBrands.map(b=>{const t=bt(b);return<button key={b} onClick={()=>{setBrand(b);setActiveTab("data");setSub("All");}}className={`relative flex items-center gap-1.5 whitespace-nowrap px-3 py-2.5 text-[13px] font-medium ${activeTab==="data"&&brand===b?"text-indigo-600":"text-zinc-500 hover:text-zinc-800"}`}><span className={`h-2 w-2 rounded-full ${t.d}`}/>{b}{activeTab==="data"&&brand===b&&<span className="absolute inset-x-2 -bottom-px h-0.5 rounded-full bg-indigo-600"/>}</button>;})}
+          {addingBrand?<div className="flex items-center gap-1 py-1.5"><input autoFocus value={newBrand} onChange={e=>setNewBrand2(e.target.value)} onKeyDown={e=>{if(e.key==="Enter")confirmBrand();if(e.key==="Escape"){setAddingBrand2(false);setNewBrand2("");}}} placeholder="New brand" className="w-32 rounded-md border border-indigo-300 px-2 py-1 text-[13px] outline-none"/><button onClick={confirmBrand} className="grid h-7 w-7 place-items-center rounded-md bg-indigo-600 text-white"><Check size={14}/></button></div>:<button onClick={()=>setAddingBrand2(true)} className="ml-1 grid h-7 w-7 shrink-0 place-items-center rounded-md border border-dashed border-zinc-300 text-zinc-400 hover:text-indigo-600"><Plus size={14}/></button>}
         </div>
       </header>
 
-      <div className="sticky top-[105px] z-20 border-b border-zinc-200 bg-zinc-50/90 backdrop-blur">
-        <div className="mx-auto flex max-w-[1700px] flex-wrap items-center gap-3 px-6 py-3">
+      {activeTab==="summary"?<SummaryPage rows={rows} allBrands={allBrands} todayD={todayD}/>:(
+      <>
+      {/* L2 + L3 */}
+      <div className="sticky top-[97px] z-20 border-b border-zinc-200 bg-zinc-50/90 backdrop-blur">
+        <div className="mx-auto flex max-w-[1700px] flex-wrap items-center gap-3 px-6 py-2.5">
           <div className="inline-flex rounded-lg border border-zinc-200 bg-white p-0.5 text-[13px] shadow-sm">
-            <button onClick={()=>{setView("monthly");setSub("All");}}className={`flex items-center gap-1.5 rounded-md px-3 py-1 font-medium ${view==="monthly"?"bg-indigo-600 text-white shadow-sm":"text-zinc-600 hover:bg-zinc-50"}`}><CalendarRange size={14}/> Monthly</button>
-            <button onClick={()=>{setView("product");setSub("All");}}className={`flex items-center gap-1.5 rounded-md px-3 py-1 font-medium ${view==="product"?"bg-indigo-600 text-white shadow-sm":"text-zinc-600 hover:bg-zinc-50"}`}><LayoutGrid size={14}/> Product</button>
+            <button onClick={()=>{setView("monthly");setSub("All");}}className={`flex items-center gap-1.5 rounded-md px-3 py-1 font-medium ${view==="monthly"?"bg-indigo-600 text-white":"text-zinc-600 hover:bg-zinc-50"}`}><CalendarRange size={14}/> Monthly</button>
+            <button onClick={()=>{setView("product");setSub("All");}}className={`flex items-center gap-1.5 rounded-md px-3 py-1 font-medium ${view==="product"?"bg-indigo-600 text-white":"text-zinc-600 hover:bg-zinc-50"}`}><LayoutGrid size={14}/> Product</button>
           </div>
-          <div className="flex flex-1 flex-wrap items-center gap-1.5">{subTabs.map(t=><button key={t} onClick={()=>setSub(t)} className={`rounded-full border px-3 py-1 text-[12px] font-medium ${effSub===t?"border-indigo-200 bg-indigo-50 text-indigo-700":"border-zinc-200 bg-white text-zinc-500 hover:text-zinc-700"}`}>{t==="All"?"All "+(view==="monthly"?"months":"products"):t}</button>)}</div>
-          <label className="flex items-center gap-2 rounded-lg border border-zinc-200 bg-white px-2.5 py-1.5 text-[13px] shadow-sm"><Search size={14} className="text-zinc-400"/><input value={query} onChange={e=>setQuery(e.target.value)} placeholder="Search…" className="w-36 bg-transparent outline-none"/></label>
+          <div className="flex flex-1 flex-wrap items-center gap-1.5">{subTabs.map(t=><button key={t} onClick={()=>setSub(t)} className={`rounded-full border px-3 py-1 text-[12px] font-medium ${effSub===t?"border-indigo-200 bg-indigo-50 text-indigo-700":"border-zinc-200 bg-white text-zinc-500"}`}>{t==="All"?"All "+(view==="monthly"?"months":"products"):t}</button>)}</div>
+          <label className="flex items-center gap-2 rounded-lg border border-zinc-200 bg-white px-2.5 py-1.5 text-[13px] shadow-sm"><Search size={14} className="text-zinc-400"/><input value={query} onChange={e=>setQuery(e.target.value)} placeholder="Search…" className="w-32 bg-transparent outline-none"/></label>
         </div>
       </div>
 
       <main className="mx-auto max-w-[1700px] space-y-5 px-6 py-5">
+        {/* KPI cards */}
         <section className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
-          <Stat icon={Wallet} label="Budget in Ad manager" value={fmt0(totals.adm)} sub={`${filtered.length} rows`} accent="text-indigo-500" ring="border-indigo-200"/>
-          <Stat icon={Gauge} label="Spent" value={fmt0(totals.spent)} sub={`of ${fmt0(totals.limit)} limit`} accent="text-sky-500" ring="border-sky-200"/>
-          <Stat icon={Target} label="Budget limit" value={fmt0(totals.limit)} sub="max allowable" accent="text-violet-500" ring="border-violet-200"/>
-          <Stat icon={CircleDashed} label="Reserve" value={fmt0(totals.reserve)} sub="held back" accent="text-zinc-400" ring="border-zinc-200"/>
-          <Stat icon={Activity} label="Active now" value={totals.active} sub="live campaigns" accent="text-emerald-500" ring="border-emerald-200"/>
-          <Stat icon={AlertTriangle} label="Expiry alerts" value={totals.alerts} sub="≤3d / passed" accent={totals.alerts?"text-rose-500":"text-zinc-400"} ring={totals.alerts?"border-rose-300":"border-zinc-200"}/>
+          <Stat icon={Wallet} label="Ad Manager Budget" value={f0(totals.adm)} sub={`${filtered.length} rows`} accent="text-indigo-500" ring="border-indigo-200"/>
+          <Stat icon={Gauge} label="Spent" value={hasActuals?f0(totals.spent):"No data"} sub={hasActuals?`of ${f0(totals.limit)} limit`:""} accent="text-sky-500" ring="border-sky-200"/>
+          <Stat icon={TargetIc} label="Budget Limit" value={f0(totals.limit)} accent="text-violet-500" ring="border-violet-200"/>
+          <Stat icon={CircleDashed} label="Reserve" value={f0(totals.reserve)} accent="text-zinc-400" ring="border-zinc-200"/>
+          <Stat icon={Activity} label="Active" value={totals.active} accent="text-emerald-500" ring="border-emerald-200"/>
+          <Stat icon={AlertTriangle} label="Alerts" value={totals.alerts} accent={totals.alerts?"text-rose-500":"text-zinc-400"} ring={totals.alerts?"border-rose-300":"border-zinc-200"}/>
         </section>
 
+        {/* Table */}
         <section className="overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-sm">
-          <div className="flex items-center gap-2 border-b border-zinc-200 bg-gradient-to-r from-zinc-50 to-white px-4 py-2.5"><Table2 size={14} className="text-indigo-500"/><span className="text-[13px] font-semibold text-zinc-700">{brand}</span><span className="text-[12px] text-zinc-400">· {filtered.length} rows</span><span className="ml-auto flex items-center gap-3 text-[11px] text-zinc-400"><span className="flex items-center gap-1"><span className="inline-block h-2.5 w-3 rounded-sm border border-zinc-300 bg-white"/> input</span><span className="flex items-center gap-1"><span className="inline-block h-2.5 w-3 rounded-sm border border-indigo-200 bg-indigo-50"/> auto</span></span></div>
-          {nested.length===0?<div className="p-10 text-center text-[13px] text-zinc-500">No rows yet. Create a campaign to get started.</div>:(
-            <div className="overflow-x-auto"><table className="min-w-[2200px] border-collapse text-[12px]"><thead>
-              <tr className="text-[10px] font-bold uppercase tracking-wider"><td colSpan={9} className="border-b border-r border-zinc-200 bg-indigo-50 px-3 py-1.5 text-indigo-700">Identity &amp; Metadata</td><td colSpan={7} className="border-b border-r border-zinc-200 bg-amber-50 px-3 py-1.5 text-amber-700">Flighting</td><td colSpan={5} className="border-b border-r border-zinc-200 bg-emerald-50 px-3 py-1.5 text-emerald-700">Financials</td><td colSpan={3} className="border-b border-zinc-200 bg-violet-50 px-3 py-1.5 text-violet-700">Performance</td></tr>
-              <tr className="border-b border-zinc-200 bg-white text-zinc-400"><Th k="pivot">{pivotLbl}</Th><Th className={CL}>Campaign</Th><Th>Ad group</Th><Th>Obj.</Th><Th>Goal</Th><Th>Tier</Th><Th>Type</Th><Th k="kol">Content</Th><Th>Platform</Th><Th>Expired</Th><Th className={CL}>Status</Th><Th>Start</Th><Th>End</Th><Th className={`text-right ${CL}`}>Days</Th><Th className={`text-right ${CL}`}>Today</Th><Th className={`text-right ${CL}`}>Rem.</Th><Th className="text-right">Limit ฿</Th><Th className="text-right">Reserved ฿</Th><Th className="text-right" k="budget">Budget ฿</Th><Th className={`text-right ${CL}`}>Daily ฿</Th><Th className={`text-right ${CL}`}>Spent ฿</Th><Th className="text-right">Actual KPI</Th><Th className="text-right">Target KPI</Th><Th className={CL}>Pace</Th></tr>
-            </thead><tbody>
-              {nested.map(([ok,camps])=>{const oKey="o:"+ok,oC=collapsed.has(oKey),oRows=camps.flatMap(([,rs])=>rs);
-                if(oC)return<SummaryRow key={oKey} rs={oRows} level="outer" label={ok} onToggle={()=>tog(oKey)}/>;
-                return(<Fragment key={oKey}>
-                  <tr className="border-y border-zinc-200 bg-zinc-100/90"><td colSpan={24} className="px-3 py-2"><div className="flex flex-wrap items-center gap-3"><button onClick={()=>tog(oKey)} className="flex items-center gap-2 rounded-md px-1.5 py-0.5 text-zinc-700 hover:bg-white"><ChevronDown size={16}/><OuterIc size={15} className={view==="monthly"?"text-emerald-500":"text-amber-500"}/><span className="text-[13px] font-bold uppercase tracking-wide text-zinc-900">{ok}</span></button><span className="text-[11px] text-zinc-500">{oRows.length} rows</span><div className="ml-auto flex items-center gap-4 text-[11px]"><span className="text-zinc-500">Budget <b className="tabular-nums text-zinc-900">{fmt(oRows.reduce((s,r)=>s+(Number(r.contentBudget)||0),0))}</b></span><span className="text-zinc-500">Spent <b className="tabular-nums text-zinc-900">{fmt(oRows.reduce((s,r)=>s+(r.m.spent||0),0))}</b></span></div></div></td></tr>
-                  {camps.map(([ck,rs])=>{const cC=collapsed.has(ck),head=rs[0],bt=brandTint(head.brand),cp=campaignPace(rs);
-                    if(cC)return<SummaryRow key={ck} rs={rs} level="campaign" label={campCore(head)+" — "+ck.slice(0,40)} onToggle={()=>tog(ck)}/>;
-                    const cB=rs.reduce((s,r)=>s+(Number(r.contentBudget)||0),0),cL=rs.reduce((s,r)=>s+(Number(r.budgetLimit)||0),0),cR=rs.reduce((s,r)=>s+(Number(r.reserveBudget)||0),0),cS=rs.reduce((s,r)=>s+(r.m.spent||0),0);
-                    return(<Fragment key={ck}>
-                      <tr className="border-b border-zinc-200 bg-gradient-to-r from-indigo-50/70 to-white"><td colSpan={24} className="py-2 pl-8 pr-3"><div className="flex flex-wrap items-center gap-3"><button onClick={()=>tog(ck)} className="flex items-center gap-1.5 rounded-md px-1.5 py-0.5 text-zinc-600 hover:bg-white"><ChevronDown size={15}/><span className="text-[13px] font-bold text-zinc-900">{campCore(head)}</span></button><span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold ring-1 ${bt.badge}`}><span className={`h-1.5 w-1.5 rounded-full ${bt.dot}`}/>{head.brand}</span><span className="font-mono text-[10px] text-zinc-400 max-w-[300px] truncate">{ck}</span><span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${head.targetSplit==="Campaign Level"?"bg-violet-100 text-violet-700":"bg-sky-100 text-sky-700"}`}>{head.targetSplit}</span><div className="ml-auto flex items-center gap-3 text-[11px]"><span className="text-zinc-500">Budget <b className="tabular-nums text-zinc-800">{fmt(cB)}</b></span><span className="text-zinc-500">Spent <b className="tabular-nums text-zinc-800">{fmt(cS)}</b></span><span className="text-zinc-500">Limit <b className="tabular-nums text-emerald-700">{fmt(cL)}</b></span>{cp&&<PaceBadge perf={cp} compact/>}</div></div></td></tr>
-                      {rs.map(r=>{const m=r.m,urg=m.expired||m.expiringSoon,rt=urg?"text-rose-600 font-medium":"text-zinc-700";rowNo++;return(
-                        <tr key={r.id} className={`border-b border-zinc-100 align-middle hover:bg-indigo-50/20 ${urg?"bg-rose-50/60":""} ${rt}`}>
-                          <td className="px-2 py-2 min-w-[180px]"><div className="flex items-center gap-1"><span className="w-5 shrink-0 text-right text-[10px] tabular-nums text-zinc-300">{rowNo}</span><button onClick={()=>setEditRow(r)} className="grid h-6 w-6 shrink-0 place-items-center rounded-md border border-zinc-200 text-zinc-400 hover:border-indigo-300 hover:text-indigo-600"><Settings2 size={12}/></button><button onClick={()=>del(r.id)} className="grid h-6 w-6 shrink-0 place-items-center rounded-md border border-zinc-200 text-zinc-400 hover:border-rose-300 hover:text-rose-600"><Trash2 size={12}/></button>{view==="monthly"?<Inp value={r.product} onChange={v=>upd(r.id,{product:v})} className="font-semibold"/>:<Inp value={r.month} onChange={v=>upd(r.id,{month:v})} placeholder="Q2-Q3" className="font-semibold"/>}</div></td>
-                          <td className={`px-3 py-2 min-w-[210px] ${CL}`}><div className="text-[12px] font-bold">{campCore(r)}{r.targetSplit==="Campaign Level"&&<span className="ml-1 text-violet-600">({r.audience})</span>}</div><div className="font-mono text-[10px] text-zinc-400">{genCampaign(r)}</div></td>
-                          <td className="px-2 py-2 min-w-[140px]"><div className="text-[11px]">{r.audience}</div><div className="font-mono text-[9px] text-zinc-400 truncate max-w-[130px]">{genAdGroup(r)}</div></td>
-                          <td className="px-2 py-2 min-w-[100px]"><Sel value={r.mediaObjective} onChange={v=>upd(r.id,{mediaObjective:v})} options={MEDIA_OBJECTIVES}/></td>
-                          <td className="px-2 py-2 min-w-[120px]"><Sel value={r.optimizationGoal} onChange={v=>upd(r.id,{optimizationGoal:v})} options={OPT_GOALS}/></td>
-                          <td className="px-2 py-2 min-w-[80px]"><Sel value={r.kolTier} onChange={v=>upd(r.id,{kolTier:v})} options={KOL_TIERS}/></td>
-                          <td className="px-2 py-2 min-w-[100px]"><Sel value={r.kolType} onChange={v=>upd(r.id,{kolType:v})} options={KOL_TYPES}/></td>
-                          <td className="px-2 py-2 min-w-[140px]"><Inp value={r.contentKol} onChange={v=>upd(r.id,{contentKol:v})} className="font-semibold"/><div className="px-1.5 font-mono text-[9px] text-zinc-400">{genAdName(r)}</div></td>
-                          <td className="px-2 py-2"><BadgeSel value={r.adPlatform} onChange={v=>upd(r.id,{adPlatform:v})} options={Object.keys(PLATFORMS)} bc={PLATFORM_BADGE[r.adPlatform]||"bg-zinc-100 text-zinc-700 ring-zinc-200"}/></td>
-                          <td className="px-2 py-2 min-w-[110px]"><DateCell value={r.expiredDate} onChange={v=>upd(r.id,{expiredDate:v})}/></td>
-                          <td className={`px-3 py-2 ${CL}`}><StatusCell r={r}/></td>
-                          <td className="px-2 py-2 min-w-[110px]"><DateCell value={r.startDate} onChange={v=>upd(r.id,{startDate:v})}/></td>
-                          <td className="px-2 py-2 min-w-[110px]"><DateCell value={r.endDate} onChange={v=>upd(r.id,{endDate:v})}/></td>
-                          <td className={`px-3 py-2 text-right tabular-nums font-medium ${CL}`}>{m.totalDays}</td>
-                          <td className={`px-3 py-2 text-right tabular-nums ${CL}`}>{m.runLabel}</td>
-                          <td className={`px-3 py-2 text-right tabular-nums ${CL}`}>{m.daysRemaining}</td>
-                          <td className="px-2 py-2 text-right min-w-[100px]"><Inp type="number" value={r.budgetLimit} onChange={v=>upd(r.id,{budgetLimit:v})} className="text-right"/></td>
-                          <td className="px-2 py-2 text-right min-w-[100px]"><Inp type="number" value={r.reserveBudget} onChange={v=>upd(r.id,{reserveBudget:v})} className="text-right"/></td>
-                          <td className="px-2 py-2 text-right min-w-[100px]"><Inp type="number" value={r.contentBudget} onChange={v=>upd(r.id,{contentBudget:v})} className="text-right font-semibold"/></td>
-                          <td className={`px-3 py-2 text-right tabular-nums ${CL}`}>{fmt(m.dailyBudget)}</td>
-                          <td className={`px-3 py-2 text-right tabular-nums font-medium ${CL}`}>{fmt(m.spent)}</td>
-                          <td className="px-2 py-2 text-right min-w-[110px]"><ActualCell r={r}/></td>
-                          <td className="px-2 py-2 text-right min-w-[100px]"><Inp type="number" value={r.kpiTarget} onChange={v=>upd(r.id,{kpiTarget:v})} className="text-right"/></td>
-                          <td className={`px-3 py-2 ${CL}`}><PaceBadge perf={cp} compact/></td>
-                        </tr>);})}
-                    </Fragment>);})}
-                </Fragment>);})}
-            </tbody></table></div>
-          )}
+          <div className="flex items-center gap-2 border-b border-zinc-200 bg-gradient-to-r from-zinc-50 to-white px-4 py-2"><Table2 size={14} className="text-indigo-500"/><span className="text-[13px] font-semibold text-zinc-700">{brand}</span><span className="text-[12px] text-zinc-400">· {filtered.length} rows</span></div>
+          {nested.length===0?<div className="p-10 text-center text-[13px] text-zinc-500">No data yet.</div>:(
+          <div className="overflow-x-auto"><table className="min-w-[2100px] border-collapse text-[12px]"><thead>
+            <tr className="border-b border-zinc-200 bg-white text-zinc-400">
+              <Th className={CL}>Campaign</Th><Th>Ad Group</Th><Th>Obj.</Th><Th>Goal</Th><Th>Tier</Th><Th>Type</Th><Th>Content</Th><Th>Platform</Th>
+              <Th>Expired</Th><Th className={CL}>Status</Th><Th>Start</Th><Th>End</Th><Th className={`text-right ${CL}`}>Days</Th><Th className={`text-right ${CL}`}>Today</Th><Th className={`text-right ${CL}`}>Rem.</Th>
+              <Th className="text-right">Limit ฿</Th><Th className="text-right">Reserved ฿</Th><Th className="text-right">Budget ฿</Th><Th className={`text-right ${CL}`}>Daily ฿</Th><Th className={`text-right ${CL}`}>Spent ฿</Th>
+              <Th className="text-right">Actual KPI</Th><Th className="text-right">Target KPI</Th><Th className={CL}>Pace</Th>
+            </tr>
+          </thead><tbody>
+            {nested.map(([ok,camps])=>{
+              const oKey="o:"+ok,oC=collapsed.has(oKey),oRows=camps.flatMap(([,rs])=>rs);
+              const oLim=oRows.reduce((s,r)=>s+(Number(r.budgetLimit)||0),0),oBud=oRows.reduce((s,r)=>s+(Number(r.contentBudget)||0),0),oRes=oRows.reduce((s,r)=>s+(Number(r.reserveBudget)||0),0);
+              return(<Fragment key={oKey}>
+                {/* OUTER group header */}
+                <tr className="border-y border-zinc-200 bg-zinc-100/90"><td colSpan={23} className="px-3 py-2"><div className="flex items-center gap-3">
+                  <button onClick={()=>tog(oKey)} className="flex items-center gap-2 text-zinc-700 hover:bg-white rounded-md px-1.5 py-0.5">{oC?<ChevronRight size={16}/>:<ChevronDown size={16}/>}<OIc size={15} className={view==="monthly"?"text-emerald-500":"text-amber-500"}/><span className="text-[13px] font-bold uppercase tracking-wide text-zinc-900">{ok}</span></button>
+                  <span className="text-[11px] text-zinc-500">{oRows.length} rows</span>
+                  {/* Always show budget summary tags */}
+                  <div className="ml-auto flex items-center gap-3 text-[11px]">
+                    <span className="rounded-full bg-violet-50 px-2 py-0.5 font-semibold text-violet-700">Limit {fmt(oLim)}</span>
+                    <span className="rounded-full bg-indigo-50 px-2 py-0.5 font-semibold text-indigo-700">Budget {fmt(oBud)}</span>
+                    <span className="rounded-full bg-zinc-100 px-2 py-0.5 font-semibold text-zinc-600">Reserve {fmt(oRes)}</span>
+                  </div>
+                </div></td></tr>
+
+                {!oC&&camps.map(([ck,rs])=>{
+                  const head=rs[0],cC=collapsed.has(ck),cp=campPace(rs);
+                  const cB=rs.reduce((s,r)=>s+(Number(r.contentBudget)||0),0),cL=rs.reduce((s,r)=>s+(Number(r.budgetLimit)||0),0),cR=rs.reduce((s,r)=>s+(Number(r.reserveBudget)||0),0),cS=rs.reduce((s,r)=>s+(r.m.spent||0),0);
+                  return(<Fragment key={ck}>
+                    {/* CAMPAIGN header — updated tags */}
+                    <tr className="border-b border-zinc-200 bg-gradient-to-r from-indigo-50/70 to-white"><td colSpan={23} className="py-2 pl-8 pr-3"><div className="flex items-center gap-2 flex-wrap">
+                      <button onClick={()=>tog(ck)} className="flex items-center gap-1.5 text-zinc-600 hover:bg-white rounded-md px-1.5 py-0.5">{cC?<ChevronRight size={15}/>:<ChevronDown size={15}/>}<span className="text-[13px] font-bold text-zinc-900">{campCore(head)}</span></button>
+                      {/* KOL/Brand tag + Objective tag (no brand name, no ad-group-level) */}
+                      <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${head.creatorType==="Brand"?"bg-amber-100 text-amber-700":"bg-indigo-100 text-indigo-700"}`}>{head.creatorType}</span>
+                      <span className="rounded-full bg-sky-100 px-2 py-0.5 text-[10px] font-semibold text-sky-700">{head.mediaObjective}</span>
+                      {!cC&&<span className="font-mono text-[10px] text-zinc-400 truncate max-w-[250px]">{ck}</span>}
+                      {cC&&<div className="ml-auto flex items-center gap-3 text-[11px]">
+                        <span className="rounded-full bg-violet-50 px-2 py-0.5 font-semibold text-violet-700">Limit {fmt(cL)}</span>
+                        <span className="rounded-full bg-indigo-50 px-2 py-0.5 font-semibold text-indigo-700">Budget {fmt(cB)}</span>
+                        <span className="rounded-full bg-zinc-100 px-2 py-0.5 font-semibold text-zinc-600">Reserve {fmt(cR)}</span>
+                      </div>}
+                      {!cC&&<div className="ml-auto flex items-center gap-3 text-[11px]">
+                        <span className="text-zinc-500">Budget <b className="tabular-nums text-zinc-800">{fmt(cB)}</b></span>
+                        <span className="text-zinc-500">Limit <b className="tabular-nums text-emerald-700">{fmt(cL)}</b></span>
+                        {cp&&<PBadge p={cp} compact/>}
+                      </div>}
+                    </div></td></tr>
+
+                    {!cC&&<>
+                    {rs.map(r=>{const m=r.m,urg=m.expired||m.expiringSoon,rt=urg?"text-rose-600 font-medium":"text-zinc-700";
+                      const budgetMismatch=Math.abs((Number(r.contentBudget)||0)+(Number(r.reserveBudget)||0)-(Number(r.budgetLimit)||0))>1;
+                      rowNo++;return(
+                      <tr key={r.id} className={`border-b border-zinc-100 align-middle hover:bg-indigo-50/20 ${urg?"bg-rose-50/60":""} ${rt}`}>
+                        <td className={`px-2 py-2 min-w-[220px] ${CL}`}>
+                          <div className="flex items-center gap-1">
+                            <span className="w-4 shrink-0 text-right text-[10px] tabular-nums text-zinc-300">{rowNo}</span>
+                            <button onClick={()=>setEditRow(r)} className="grid h-5 w-5 shrink-0 place-items-center rounded border border-zinc-200 text-zinc-400 hover:text-indigo-600"><Settings2 size={10}/></button>
+                            <button onClick={()=>del(r.id)} className="grid h-5 w-5 shrink-0 place-items-center rounded border border-zinc-200 text-zinc-400 hover:text-rose-600"><Trash2 size={10}/></button>
+                          </div>
+                          <div className="mt-0.5 text-[12px] font-bold pl-[30px]">{campCore(r)}{r.targetSplit==="Campaign Level"&&<span className="ml-1 text-violet-600">({r.audience})</span>}</div>
+                          <div className="pl-[30px] font-mono text-[9px] text-zinc-400">{genCamp(r)}</div>
+                        </td>
+                        <td className="px-2 py-2 min-w-[160px]"><div className="text-[11px] font-medium">{r.audience}</div><div className="font-mono text-[9px] text-zinc-400">{genAG(r)}</div></td>
+                        <td className="px-2 py-2"><Sel value={r.mediaObjective} onChange={v=>upd(r.id,{mediaObjective:v})} options={MEDIA_OBJ}/></td>
+                        <td className="px-2 py-2"><Sel value={r.optimizationGoal} onChange={v=>upd(r.id,{optimizationGoal:v})} options={OPT_GOALS}/></td>
+                        <td className="px-2 py-2"><Sel value={r.kolTier} onChange={v=>upd(r.id,{kolTier:v})} options={KOL_TIERS}/></td>
+                        <td className="px-2 py-2"><Sel value={r.kolType} onChange={v=>upd(r.id,{kolType:v})} options={KOL_TYPES}/></td>
+                        <td className="px-2 py-2 min-w-[130px]"><Inp value={r.contentKol} onChange={v=>upd(r.id,{contentKol:v})} className="font-semibold"/><div className="px-1 font-mono text-[9px] text-zinc-400">{genAN(r)}</div></td>
+                        <td className="px-2 py-2"><BSel value={r.adPlatform} onChange={v=>upd(r.id,{adPlatform:v})} options={Object.keys(PLATFORMS)} bc={PB[r.adPlatform]||"bg-zinc-100 text-zinc-700"}/></td>
+                        <td className="px-2 py-2 min-w-[100px]">{r.expiredDate?<DCell value={r.expiredDate} onChange={v=>upd(r.id,{expiredDate:v})}/>:<span className="text-lg text-zinc-300 px-1.5">∞</span>}</td>
+                        <td className={`px-2 py-2 ${CL}`}>{r.m.status==="New"?<select value={r.statusOverride==="Schedule"?"Schedule":"New"} onChange={e=>upd(r.id,{statusOverride:e.target.value==="Schedule"?"Schedule":null})} className={`cursor-pointer rounded-full px-2 py-0.5 text-[11px] font-semibold outline-none ring-1 ring-current/20 ${SS[r.statusOverride==="Schedule"?"Schedule":"New"]}`}><option value="New">New</option><option value="Schedule">Schedule</option></select>:<SPill s={r.m.status}/>}</td>
+                        <td className="px-2 py-2 min-w-[100px]">{r.startDate?<DCell value={r.startDate} onChange={v=>upd(r.id,{startDate:v})}/>:<span className="text-[11px] text-zinc-300 px-1.5">—</span>}</td>
+                        <td className="px-2 py-2 min-w-[100px]">{r.endDate?<DCell value={r.endDate} onChange={v=>upd(r.id,{endDate:v})}/>:<span className="text-[11px] text-zinc-300 px-1.5">—</span>}</td>
+                        <td className={`px-2 py-2 text-right tabular-nums ${CL}`}>{m.totalDays}</td>
+                        <td className={`px-2 py-2 text-right tabular-nums ${CL}`}>{m.runLabel}</td>
+                        <td className={`px-2 py-2 text-right tabular-nums ${CL}`}>{m.daysRemaining}</td>
+                        <td className={`px-2 py-2 text-right min-w-[90px] ${budgetMismatch?"text-rose-600 font-bold":""}`}><Inp type="number" value={r.budgetLimit} onChange={v=>upd(r.id,{budgetLimit:v})} className={`text-right ${budgetMismatch?"text-rose-600 font-bold":""}`}/></td>
+                        <td className={`px-2 py-2 text-right min-w-[90px] ${budgetMismatch?"text-rose-600 font-bold":""}`}><Inp type="number" value={r.reserveBudget} onChange={v=>upd(r.id,{reserveBudget:v})} className={`text-right ${budgetMismatch?"text-rose-600 font-bold":""}`}/></td>
+                        <td className={`px-2 py-2 text-right min-w-[90px] ${budgetMismatch?"text-rose-600 font-bold":""}`}><Inp type="number" value={r.contentBudget} onChange={v=>upd(r.id,{contentBudget:v})} className={`text-right font-semibold ${budgetMismatch?"text-rose-600":""}`}/></td>
+                        <td className={`px-2 py-2 text-right tabular-nums ${CL}`}>{fmt(m.dailyBudget)}</td>
+                        <td className={`px-2 py-2 text-right tabular-nums ${CL}`}>{!hasActuals?<span className="text-[11px] text-zinc-400 italic">No data</span>:<div>{fmt(m.spent)}{importDate&&<div className="text-[9px] text-zinc-400">Updated: {fDShort(importDate)}</div>}</div>}</td>
+                        <td className="px-2 py-2 text-right min-w-[100px]">{r.actual==null?<span className="text-[11px] text-zinc-400 italic">No data</span>:<Inp type="number" value={r.actual} onChange={v=>upd(r.id,{actual:v})} className="text-right"/>}</td>
+                        <td className="px-2 py-2 text-right min-w-[90px]"><Inp type="number" value={r.kpiTarget} onChange={v=>upd(r.id,{kpiTarget:v})} className="text-right"/>{r.cpr>0&&<div className="text-[9px] text-zinc-400 text-right">Cost per result: {r.cpr}</div>}</td>
+                        <td className={`px-2 py-2 ${CL}`}><PBadge p={cp} compact/></td>
+                      </tr>);})}
+                    {/* Add sub-content button */}
+                    <tr className="border-b border-zinc-100"><td colSpan={23} className="pl-10 py-1.5"><button onClick={()=>addSubContent(head)} className="flex items-center gap-1 text-[11px] text-indigo-500 hover:text-indigo-700 font-medium"><Plus size={12}/> Add content under this campaign</button></td></tr>
+                    </>}
+                  </Fragment>);})}
+              </Fragment>);})}
+          </tbody></table></div>)}
         </section>
 
-        <section className="overflow-hidden rounded-xl border border-indigo-200 bg-gradient-to-br from-indigo-50 via-violet-50/40 to-white shadow-sm">
-          <div className="flex items-center gap-2 border-b border-indigo-100 px-4 py-3"><div className="grid h-7 w-7 place-items-center rounded-md bg-gradient-to-br from-indigo-500 to-violet-600 text-white"><Sparkles size={15}/></div><h3 className="text-[14px] font-bold text-zinc-900">AI Insights</h3>{!imported&&<span className="ml-auto text-[12px] text-zinc-400">Import performance to activate</span>}</div>
-          <div className="p-4">{!imported?<div className="flex items-center gap-3 rounded-lg border border-dashed border-indigo-200 bg-white/70 p-4 text-[13px] text-zinc-500"><Wand2 size={18} className="text-indigo-400"/><span>Click <b>Import performance</b> to load actuals and see pace-index recommendations.</span></div>:<ul className="space-y-2.5">{insights.map((ins,i)=>{const tone={shift:{ic:"text-indigo-500",icon:Wand2},warn:{ic:"text-amber-500",icon:AlertTriangle},alert:{ic:"text-rose-500",icon:AlertTriangle},ok:{ic:"text-emerald-500",icon:Trophy}}[ins.tone];const Ic=tone.icon;return<li key={i} className="flex items-start gap-2.5 text-[13px] leading-relaxed text-zinc-700"><Ic size={15} className={`mt-0.5 shrink-0 ${tone.ic}`}/><span>{ins.text}</span></li>;})}</ul>}</div>
+        {/* 4 Donut Charts */}
+        {filtered.length>0&&<section className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+          <div className="rounded-xl border border-zinc-200 bg-white p-4 shadow-sm"><Donut data={donutData.d1} title={view==="monthly"?"By Product":"By Month"}/></div>
+          <div className="rounded-xl border border-zinc-200 bg-white p-4 shadow-sm"><Donut data={donutData.d2} title="By Platform"/></div>
+          <div className="rounded-xl border border-zinc-200 bg-white p-4 shadow-sm"><Donut data={donutData.d3} title="By Objective"/></div>
+          <div className="rounded-xl border border-zinc-200 bg-white p-4 shadow-sm"><Donut data={donutData.d4} title="By Campaign Type"/></div>
+        </section>}
+
+        {/* AI Insights */}
+        <section className="overflow-hidden rounded-xl border border-indigo-200 bg-gradient-to-br from-indigo-50 to-white shadow-sm">
+          <div className="flex items-center gap-2 border-b border-indigo-100 px-4 py-3"><div className="grid h-7 w-7 place-items-center rounded-md bg-gradient-to-br from-indigo-500 to-violet-600 text-white"><Sparkles size={15}/></div><h3 className="text-[14px] font-bold text-zinc-900">AI Insights</h3></div>
+          <div className="p-4">{!imported?<div className="flex items-center gap-3 rounded-lg border border-dashed border-indigo-200 bg-white/70 p-4 text-[13px] text-zinc-500"><Wand2 size={18} className="text-indigo-400"/>Click <b>Import performance</b> to activate.</div>:<ul className="space-y-2">{insights.map((ins,i)=>{const ic={shift:"text-indigo-500",warn:"text-amber-500",alert:"text-rose-500",ok:"text-emerald-500"}[ins.tone];const I={shift:Wand2,warn:AlertTriangle,alert:AlertTriangle,ok:Trophy}[ins.tone];return<li key={i} className="flex items-start gap-2 text-[13px] text-zinc-700"><I size={15} className={`mt-0.5 shrink-0 ${ic}`}/>{ins.text}</li>;})}</ul>}</div>
         </section>
-        <footer className="pb-6 pt-1 text-center text-[11px] text-zinc-400">Data synced in real-time with Firebase Firestore. All changes persist across sessions and devices.</footer>
       </main>
+      </>)}
 
-      {showForm&&<CampaignForm brands={allBrands} productsFor={productsFor} onAddProd={onAddProd} defaultBrand={brand==="All Brands"?allBrands[0]:brand} today={today} onClose={()=>setShowForm(false)} onCreate={addRows}/>}
-      {editRow&&<EditModal row={editRow} brands={allBrands} productsFor={productsFor} onAddProd={onAddProd} onSave={p=>{upd(editRow.id,p);setEditRow(null);}} onClose={()=>setEditRow(null)}/>}
+      {showForm&&<CampaignForm brands={allBrands} productsFor={productsFor} onAddProd={(b,n)=>setEP(p=>[...p,{brand:b,product:n}])} defaultBrand={brand} today={today} onClose={()=>setShowForm(false)} onCreate={addRows}/>}
+      {editRow&&<EditModal row={editRow} brands={allBrands} productsFor={productsFor} onAddProd={(b,n)=>setEP(p=>[...p,{brand:b,product:n}])} onSave={p=>{upd(editRow.id,p);setEditRow(null);}} onClose={()=>setEditRow(null)}/>}
     </div>
   );
 }
 
-/* === Edit Modal === */
-function EditModal({row,brands,productsFor,onAddProd,onSave,onClose}){const[brand,setBr]=useState(row.brand);const products=productsFor(brand);const[product,setPr]=useState(row.product);const[ts,setTs]=useState(row.targetSplit||"Ad Group Level");const[adding,setAdding]=useState(false);const[np,setNp]=useState("");const chBr=b=>{setBr(b);setPr(productsFor(b)[0]||"");};const addP=()=>{const n=np.trim();if(!n)return;onAddProd(brand,n);setPr(n);setNp("");setAdding(false);};const fld="mt-1 w-full rounded-lg border border-zinc-200 px-3 py-2 text-[14px] outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100";return(<div className="fixed inset-0 z-50 flex items-center justify-center bg-zinc-900/40 backdrop-blur-sm p-4" onClick={onClose}><div className="w-full max-w-sm overflow-hidden rounded-2xl bg-white shadow-2xl" onClick={e=>e.stopPropagation()}><div className="flex items-center gap-2 border-b border-zinc-200 px-5 py-3"><Settings2 size={15} className="text-indigo-600"/><h2 className="text-[15px] font-bold">Edit metadata</h2><button onClick={onClose} className="ml-auto p-1 text-zinc-400 hover:bg-zinc-100 rounded-md"><XIcon size={18}/></button></div><div className="space-y-4 p-5"><label className="block"><span className="text-[12px] font-medium text-zinc-600">Brand</span><select value={brand} onChange={e=>chBr(e.target.value)} className={fld}>{brands.map(b=><option key={b}>{b}</option>)}</select></label><label className="block"><span className="text-[12px] font-medium text-zinc-600">Product</span><div className="mt-1 flex items-center gap-1.5"><select value={product} onChange={e=>setPr(e.target.value)} className="w-full rounded-lg border border-zinc-200 px-3 py-2 text-[14px] outline-none">{products.map(p=><option key={p}>{p}</option>)}</select><button onClick={()=>setAdding(v=>!v)} className="grid h-9 w-9 shrink-0 place-items-center rounded-lg border border-zinc-200 text-indigo-600 hover:bg-indigo-50"><Plus size={16}/></button></div>{adding&&<div className="mt-1.5 flex gap-1.5"><input autoFocus value={np} onChange={e=>setNp(e.target.value)} onKeyDown={e=>e.key==="Enter"&&addP()} placeholder="New product" className="w-full rounded-lg border border-indigo-200 px-2.5 py-1.5 text-[13px] outline-none"/><button onClick={addP} className="rounded-lg bg-indigo-600 px-3 text-[13px] font-medium text-white">Add</button></div>}</label><label className="block"><span className="text-[12px] font-medium text-zinc-600">Target Split</span><select value={ts} onChange={e=>setTs(e.target.value)} className={fld}>{TARGET_SPLITS.map(t=><option key={t}>{t}</option>)}</select></label></div><div className="flex justify-end gap-2 border-t border-zinc-200 px-5 py-3"><button onClick={onClose} className="rounded-lg border border-zinc-200 px-4 py-1.5 text-[13px] font-medium text-zinc-600 hover:bg-zinc-50">Cancel</button><button onClick={()=>onSave({brand,product,targetSplit:ts})} className="rounded-lg bg-indigo-600 px-4 py-1.5 text-[13px] font-medium text-white hover:bg-indigo-700">Save</button></div></div></div>);}
+/* ================================================================ */
+/*  SUMMARY & FORECAST PAGE                                          */
+/* ================================================================ */
+function SummaryPage({rows,allBrands,todayD}){
+  const enriched=rows.map(r=>({...r,m:metrics(r,todayD)}));
+  /* Card 1: Monthly brand matrix */
+  const matrix=useMemo(()=>{const m=new Map();enriched.forEach(r=>{const k=r.brand+"||"+r.product+"||"+r.month;if(!m.has(k))m.set(k,{brand:r.brand,product:r.product,month:r.month,limit:0});m.get(k).limit+=Number(r.budgetLimit)||0;});return Array.from(m.values());},[enriched]);
+  const matrixBrands=Array.from(new Set(matrix.map(m=>m.brand)));
+  const matrixProducts=b=>Array.from(new Set(matrix.filter(m=>m.brand===b).map(m=>m.product)));
+  const matrixMonths=Array.from(new Set(matrix.map(m=>m.month))).sort((a,b)=>MONTHS.indexOf(a)-MONTHS.indexOf(b));
+  const getLimit=(b,p,mo)=>{const found=matrix.find(m=>m.brand===b&&m.product===p&&m.month===mo);return found?found.limit:0;};
+  /* Card 2: Content type breakdown */
+  const contentBreakdown=useMemo(()=>{const m=new Map();enriched.forEach(r=>{const k=r.brand+"||"+(r.kolType||"Other");if(!m.has(k))m.set(k,{brand:r.brand,type:r.kolType||"Other",budget:0});m.get(k).budget+=Number(r.contentBudget)||0;});return Array.from(m.values());},[enriched]);
+  /* Card 3: Platform spend */
+  const platSpend=useMemo(()=>{const m=new Map();enriched.forEach(r=>{const k=r.adPlatform;m.set(k,(m.get(k)||0)+(Number(r.contentBudget)||0));});return Array.from(m.entries()).map(([name,value])=>({name,value})).sort((a,b)=>b.value-a.value);},[enriched]);
+  /* Card 4: Status overview */
+  const statusCounts=useMemo(()=>{const m={Waiting:0,New:0,Active:0,Complete:0};enriched.forEach(r=>{m[r.m.status]=(m[r.m.status]||0)+1;});return m;},[enriched]);
+  const totalBudget=enriched.reduce((s,r)=>s+(Number(r.budgetLimit)||0),0);
+  const totalSpent=enriched.reduce((s,r)=>s+(r.m.spent||0),0);
 
-/* === Campaign Form === */
+  return(
+    <main className="mx-auto max-w-[1700px] space-y-5 px-6 py-5">
+      <h2 className="text-[18px] font-bold text-zinc-900 flex items-center gap-2"><BarChart3 size={20} className="text-indigo-500"/>Summary &amp; Forecast</h2>
+      <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
+        {/* Card 1: Monthly brand matrix */}
+        <div className="rounded-xl border border-zinc-200 bg-white p-5 shadow-sm col-span-full">
+          <h3 className="text-[14px] font-bold text-zinc-800 mb-3">Monthly Campaign Matrix by Product</h3>
+          <div className="overflow-x-auto"><table className="w-full border-collapse text-[12px]"><thead><tr className="border-b border-zinc-200 text-zinc-400"><th className="px-3 py-2 text-left font-semibold">Brand / Product</th>{matrixMonths.map(mo=><th key={mo} className="px-3 py-2 text-right font-semibold">{MA[mo]||mo}</th>)}<th className="px-3 py-2 text-right font-semibold">Total</th></tr></thead><tbody>
+          {matrixBrands.map(b=>{const prods=matrixProducts(b);return<Fragment key={b}>{prods.map((p,i)=>{const rowTotal=matrixMonths.reduce((s,mo)=>s+getLimit(b,p,mo),0);return<tr key={p} className="border-b border-zinc-100 hover:bg-zinc-50"><td className="px-3 py-2">{i===0&&<span className="font-bold text-zinc-900">{b} — </span>}<span className="text-zinc-700">{p}</span></td>{matrixMonths.map(mo=>{const v=getLimit(b,p,mo);return<td key={mo} className={`px-3 py-2 text-right tabular-nums ${v?"text-zinc-800 font-medium":"text-zinc-300"}`}>{v?fmt(v):"—"}</td>;})}<td className="px-3 py-2 text-right tabular-nums font-bold text-indigo-700">{fmt(rowTotal)}</td></tr>;})}</Fragment>;})}
+          </tbody></table></div>
+        </div>
+        {/* Card 2: Content type breakdown */}
+        <div className="rounded-xl border border-zinc-200 bg-white p-5 shadow-sm">
+          <h3 className="text-[14px] font-bold text-zinc-800 mb-3">Budget by Content Type</h3>
+          <div className="space-y-2">{Array.from(new Set(contentBreakdown.map(c=>c.brand))).map(b=><div key={b}><div className="text-[11px] font-semibold text-zinc-500 uppercase tracking-wider mb-1">{b}</div>{contentBreakdown.filter(c=>c.brand===b).sort((a,b2)=>b2.budget-a.budget).map(c=><div key={c.type} className="flex items-center justify-between py-1 px-2 rounded-md hover:bg-zinc-50"><span className="text-[12px] text-zinc-700">{c.type}</span><span className="text-[12px] font-semibold tabular-nums text-zinc-900">{fmt(c.budget)}</span></div>)}</div>)}</div>
+        </div>
+        {/* Card 3: Platform distribution */}
+        <div className="rounded-xl border border-zinc-200 bg-white p-5 shadow-sm">
+          <h3 className="text-[14px] font-bold text-zinc-800 mb-3">Platform Distribution</h3>
+          <Donut data={platSpend} title="" size={160}/>
+        </div>
+        {/* Card 4: Campaign Status Overview */}
+        <div className="rounded-xl border border-zinc-200 bg-white p-5 shadow-sm">
+          <h3 className="text-[14px] font-bold text-zinc-800 mb-3">Campaign Status</h3>
+          <div className="grid grid-cols-2 gap-3">{Object.entries(statusCounts).map(([s,c])=><div key={s} className="rounded-lg bg-zinc-50 p-3 text-center"><div className="text-2xl font-bold tabular-nums text-zinc-900">{c}</div><SPill s={s}/></div>)}</div>
+        </div>
+        {/* Card 5: Budget utilization */}
+        <div className="rounded-xl border border-zinc-200 bg-white p-5 shadow-sm">
+          <h3 className="text-[14px] font-bold text-zinc-800 mb-3">Budget Utilization</h3>
+          <div className="space-y-3">
+            <div><div className="flex justify-between text-[12px] mb-1"><span className="text-zinc-600">Total Budget Limit</span><span className="font-bold tabular-nums">{fmt(totalBudget)}</span></div></div>
+            <div><div className="flex justify-between text-[12px] mb-1"><span className="text-zinc-600">Total Spent (est.)</span><span className="font-bold tabular-nums">{fmt(totalSpent)}</span></div><div className="h-2 rounded-full bg-zinc-100 overflow-hidden"><div className="h-full bg-indigo-500 rounded-full" style={{width:`${totalBudget?Math.min(100,totalSpent/totalBudget*100):0}%`}}/></div><div className="text-[10px] text-zinc-400 mt-0.5 text-right">{totalBudget?Math.round(totalSpent/totalBudget*100):0}% utilized</div></div>
+          </div>
+        </div>
+        {/* Card 6: Brand totals */}
+        <div className="rounded-xl border border-zinc-200 bg-white p-5 shadow-sm">
+          <h3 className="text-[14px] font-bold text-zinc-800 mb-3">Brand Budget Summary</h3>
+          {allBrands.map(b=>{const bRows=enriched.filter(r=>r.brand===b);const bLimit=bRows.reduce((s,r)=>s+(Number(r.budgetLimit)||0),0);const bBudget=bRows.reduce((s,r)=>s+(Number(r.contentBudget)||0),0);return<div key={b} className="flex items-center justify-between py-2 border-b border-zinc-100 last:border-0"><div><div className="text-[13px] font-semibold text-zinc-900">{b}</div><div className="text-[11px] text-zinc-400">{bRows.length} campaigns</div></div><div className="text-right"><div className="text-[13px] font-bold tabular-nums text-zinc-900">{fmt(bLimit)}</div><div className="text-[11px] text-zinc-400">Budget: {fmt(bBudget)}</div></div></div>;})}
+        </div>
+      </div>
+    </main>
+  );
+}
+
+/* ================================================================ */
+/*  EDIT MODAL                                                        */
+/* ================================================================ */
+function EditModal({row,brands,productsFor,onAddProd,onSave,onClose}){const[br,sBr]=useState(row.brand);const pr=productsFor(br);const[pd,sPd]=useState(row.product);const[ts,sTs]=useState(row.targetSplit||"Ad Group Level");const fld="mt-1 w-full rounded-lg border border-zinc-200 px-3 py-2 text-[14px] outline-none focus:border-indigo-400";return(<div className="fixed inset-0 z-50 flex items-center justify-center bg-zinc-900/40 backdrop-blur-sm p-4" onClick={onClose}><div className="w-full max-w-sm rounded-2xl bg-white shadow-2xl" onClick={e=>e.stopPropagation()}><div className="flex items-center gap-2 border-b border-zinc-200 px-5 py-3"><Settings2 size={15} className="text-indigo-600"/><h2 className="text-[15px] font-bold">Edit metadata</h2><button onClick={onClose} className="ml-auto p-1 text-zinc-400 hover:bg-zinc-100 rounded-md"><XIcon size={18}/></button></div><div className="space-y-4 p-5"><label className="block"><span className="text-[12px] font-medium text-zinc-600">Brand</span><select value={br} onChange={e=>{sBr(e.target.value);sPd(productsFor(e.target.value)[0]||"");}} className={fld}>{brands.map(b=><option key={b}>{b}</option>)}</select></label><label className="block"><span className="text-[12px] font-medium text-zinc-600">Product</span><select value={pd} onChange={e=>sPd(e.target.value)} className={fld}>{pr.map(p=><option key={p}>{p}</option>)}</select></label><label className="block"><span className="text-[12px] font-medium text-zinc-600">Target Split</span><select value={ts} onChange={e=>sTs(e.target.value)} className={fld}>{TARGET_SPLITS.map(t=><option key={t}>{t}</option>)}</select></label></div><div className="flex justify-end gap-2 border-t border-zinc-200 px-5 py-3"><button onClick={onClose} className="rounded-lg border border-zinc-200 px-4 py-1.5 text-[13px] font-medium text-zinc-600">Cancel</button><button onClick={()=>onSave({brand:br,product:pd,targetSplit:ts})} className="rounded-lg bg-indigo-600 px-4 py-1.5 text-[13px] font-medium text-white">Save</button></div></div></div>);}
+
+/* ================================================================ */
+/*  CAMPAIGN FORM (textarea-based Tier/Type/Expire + multi-audience)  */
+/* ================================================================ */
 function CampaignForm({brands,productsFor,onAddProd,defaultBrand,today,onClose,onCreate}){
-  const[brand,setBr]=useState(defaultBrand);const products=productsFor(brand);const[product,setPr]=useState(products[0]||"");const[addingPr,setAddingPr]=useState(false);const[np,setNp]=useState("");
-  const[noAwo,setNoAwo]=useState(false);const[awoCustom,setAwoC]=useState("");const[limitBudget,setLB]=useState(0);const[objective,setObj]=useState("Purchase");const[goal,setGoal]=useState("Purchase");const[targetSplit,setTS]=useState("Ad Group Level");const[creatorType,setCT]=useState("KOL");const[kpiResult,setKR]=useState(0);const[cpr,setCPR]=useState(0);
-  const[year,setYear]=useState(2026);const[monthSel,setMS]=useState("June");const[monthCustom,setMC]=useState("");const[useReserve,setUR]=useState(false);const[reserveVal,setRV]=useState(0);const[reserveMode,setRM]=useState("amount");const[splitEqually,setSE]=useState(true);
-  const[entries,setEntries]=useState([]);const[pasteText,setPT]=useState("");
-  const[audiences,setAud]=useState(new Set(["Prospect"]));const[customAud,setCA]=useState("");
-  const chBr=b=>{setBr(b);setPr(productsFor(b)[0]||"");};const confirmPr=()=>{const n=np.trim();if(!n)return;onAddProd(brand,n);setPr(n);setNp("");setAddingPr(false);};
-  const parsePaste=()=>{const lines=pasteText.split("\n").map(s=>s.trim()).filter(Boolean);setEntries(prev=>[...prev,...lines.map(n=>({name:n,tier:"Macro",type:"Review",expireCode:""}))]);setPT("");};
-  const updEntry=(i,patch)=>setEntries(es=>es.map((e,j)=>j===i?{...e,...patch}:e));const delEntry=i=>setEntries(es=>es.filter((_,j)=>j!==i));
-  const toggleAud=a=>{const n=new Set(audiences);n.has(a)?n.delete(a):n.add(a);setAud(n);};
-  const allAuds=useMemo(()=>{const a=[...audiences];if(customAud.trim())customAud.split(",").map(s=>s.trim()).filter(Boolean).forEach(s=>{if(!a.includes(s))a.push(s);});return a;},[audiences,customAud]);
+  const[br,sBr]=useState(defaultBrand);const pr=productsFor(br);const[pd,sPd]=useState(pr[0]||"");const[addPr,sAddPr]=useState(false);const[np,sNp]=useState("");
+  const[noAwo,sNoAwo]=useState(false);const[awoCust,sAwoCust]=useState("");
+  const[limitB,sLimitB]=useState(0);const[obj,sObj]=useState("Purchase");const[goal,sGoal]=useState("Purchase");const[ts,sTs]=useState("Ad Group Level");
+  const[ct2,sCt]=useState("KOL");const[kpiR,sKpiR]=useState(0);const[cpr,sCpr]=useState(0);
+  const[yr,sYr]=useState(2026);const[mo,sMo]=useState("June");const[moCust,sMoCust]=useState("");
+  const[useRes,sUseRes]=useState(false);const[resVal,sResVal]=useState(0);const[resMode,sResMode]=useState("amount");const[splitEq,sSplitEq]=useState(true);
+  // Textarea-based inputs (auto-map by line number)
+  const[kolNames,sKolNames]=useState("");const[kolTiers,sKolTiers]=useState("");const[kolTypes,sKolTypes]=useState("");const[kolExpires,sKolExpires]=useState("");
+  // Audiences
+  const[auds,sAuds]=useState(new Set(["Prospect"]));const[custAuds,sCustAuds]=useState("");
+  const togAud=a=>{const n=new Set(auds);n.has(a)?n.delete(a):n.add(a);sAuds(n);};
+  const chBr=b=>{sBr(b);sPd(productsFor(b)[0]||"");};
+  const addProd=()=>{const n=np.trim();if(!n)return;onAddProd(br,n);sPd(n);sNp("");sAddPr(false);};
+
+  const names=kolNames.split("\n").map(s=>s.trim()).filter(Boolean);
+  const tiers=kolTiers.split("\n").map(s=>s.trim());
+  const types=kolTypes.split("\n").map(s=>s.trim());
+  const expires=kolExpires.split("\n").map(s=>s.trim());
+  const entries=names.map((name,i)=>({name,tier:tiers[i]||"Macro",type:types[i]||"Review",expireCode:expires[i]||""}));
+
+  const allAuds=useMemo(()=>{const a=[...auds];if(custAuds.trim())custAuds.split("\n").flatMap(l=>l.split(",")).map(s=>s.trim()).filter(Boolean).forEach(s=>{if(!a.includes(s))a.push(s);});return a;},[auds,custAuds]);
   const totalRows=entries.length*Math.max(1,allAuds.length);
-  const reserveTotal=!useReserve?0:reserveMode==="percent"?(Number(limitBudget)||0)*(Number(reserveVal)||0)/100:Number(reserveVal)||0;
-  const allocatable=Math.max(0,(Number(limitBudget)||0)-reserveTotal);const perRow=totalRows&&splitEqually?Math.round(allocatable/totalRows):0;
-  const canSubmit=product&&entries.length>0&&Number(limitBudget)>0&&allAuds.length>0;
+  const resTotal=!useRes?0:resMode==="percent"?(Number(limitB)||0)*(Number(resVal)||0)/100:Number(resVal)||0;
+  const alloc=Math.max(0,(Number(limitB)||0)-resTotal);const perRow=totalRows&&splitEq?Math.round(alloc/totalRows):0;
+  const canSubmit=pd&&entries.length>0&&Number(limitB)>0&&allAuds.length>0;
   const genCId=()=>"c"+Date.now().toString(36)+Math.random().toString(36).slice(2,6);
-  const submit=()=>{if(!canSubmit)return;let rowMonth,start,end;if(monthSel==="Custom"){rowMonth=monthCustom.trim();start=today;end=addDaysF(today,30);}else{const mi=MONTHS.indexOf(monthSel);const last=new Date(year,mi+1,0).getDate();rowMonth=monthSel;start=`${year}-${pad(mi+1)}-01`;end=`${year}-${pad(mi+1)}-${pad(last)}`;}const cid=genCId();const resPerRow=totalRows?Math.round(reserveTotal/totalRows):0;const newRows=[];for(const aud of allAuds){for(const e of entries){newRows.push(mkSeed({campaignId:cid,brand,product,noAwo,awoCustom:awoCustom.trim(),contentKol:e.name,kolTier:creatorType==="Brand"?"-":((e.tier==="-"||!e.tier)?"-":e.tier),kolType:creatorType==="Brand"?"-":((e.type==="-"||!e.type)?"-":e.type),adPlatform:"TikTok",creatorType,targetSplit,audience:aud,month:rowMonth,mediaObjective:objective,optimizationGoal:goal,expireCode:e.expireCode||"",expiredDate:end,startDate:start,endDate:end,contentBudget:perRow,budgetLimit:Number(limitBudget)||0,reserveBudget:resPerRow,equalSplit:splitEqually,totalCampaignBudget:Number(limitBudget)||0,reserveTotal,kpiTarget:Number(kpiResult)||0,cpr:Number(cpr)||0,actual:null}));}}onCreate(newRows,{brand,product});};
+
+  const submit=()=>{if(!canSubmit)return;let rowMonth,start,end;if(mo==="Custom"){rowMonth=moCust.trim();start="";end="";}else{const mi=MONTHS.indexOf(mo);const last=new Date(yr,mi+1,0).getDate();rowMonth=mo;start=`${yr}-${pad(mi+1)}-01`;end=`${yr}-${pad(mi+1)}-${pad(last)}`;}const cid=genCId();const resPerRow=totalRows?Math.round(resTotal/totalRows):0;const nr=[];for(const aud of allAuds){for(const e of entries){nr.push(mkS({campaignId:cid,brand:br,product:pd,noAwo,awoCustom:awoCust.trim(),contentKol:e.name,kolTier:ct2==="Brand"?"-":(e.tier==="-"?"-":e.tier),kolType:ct2==="Brand"?"-":(e.type==="-"?"-":e.type),adPlatform:"TikTok",creatorType:ct2,targetSplit:ts,audience:aud,month:rowMonth,mediaObjective:obj,optimizationGoal:goal,expireCode:e.expireCode||"",expiredDate:"",startDate:start,endDate:end,contentBudget:perRow,budgetLimit:Number(limitB)||0,reserveBudget:resPerRow,equalSplit:splitEq,totalCampaignBudget:Number(limitB)||0,reserveTotal:resTotal,kpiTarget:Number(kpiR)||0,cpr:Number(cpr)||0,actual:null}));}}onCreate(nr,{brand:br,product:pd});};
+
   const fld="mt-1 w-full rounded-lg border border-zinc-200 px-3 py-2 text-[14px] outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100";
   return(<div className="fixed inset-0 z-50 flex items-end justify-center bg-zinc-900/40 backdrop-blur-sm sm:items-center sm:p-4" onClick={onClose}><div className="max-h-[92vh] w-full max-w-2xl overflow-y-auto rounded-t-2xl bg-white shadow-2xl sm:rounded-2xl" onClick={e=>e.stopPropagation()}>
-    <div className="sticky top-0 flex items-center gap-2 border-b border-zinc-200 bg-white px-5 py-3 z-10"><Plus size={15} className="text-indigo-600"/><h2 className="text-[15px] font-bold text-zinc-900">New campaign</h2><button onClick={onClose} className="ml-auto p-1 text-zinc-400 hover:bg-zinc-100 rounded-md"><XIcon size={18}/></button></div>
+    <div className="sticky top-0 flex items-center gap-2 border-b border-zinc-200 bg-white px-5 py-3 z-10"><Plus size={15} className="text-indigo-600"/><h2 className="text-[15px] font-bold">New campaign</h2><button onClick={onClose} className="ml-auto p-1 text-zinc-400 hover:bg-zinc-100 rounded-md"><XIcon size={18}/></button></div>
     <div className="space-y-4 p-5">
-      <div className="grid grid-cols-2 gap-3"><label className="block"><span className="text-[12px] font-medium text-zinc-600">Brand</span><select value={brand} onChange={e=>chBr(e.target.value)} className={fld}>{brands.map(b=><option key={b}>{b}</option>)}</select></label><label className="block"><span className="text-[12px] font-medium text-zinc-600">Product</span><div className="mt-1 flex gap-1.5"><select value={product} onChange={e=>setPr(e.target.value)} className="w-full rounded-lg border border-zinc-200 px-3 py-2 text-[14px] outline-none">{products.length===0&&<option value="">Add →</option>}{products.map(p=><option key={p}>{p}</option>)}</select><button onClick={()=>setAddingPr(v=>!v)} className="grid h-9 w-9 shrink-0 place-items-center rounded-lg border border-zinc-200 text-indigo-600 hover:bg-indigo-50"><Plus size={16}/></button></div>{addingPr&&<div className="mt-1.5 flex gap-1.5"><input autoFocus value={np} onChange={e=>setNp(e.target.value)} onKeyDown={e=>e.key==="Enter"&&confirmPr()} placeholder="New product" className="w-full rounded-lg border border-indigo-200 px-2.5 py-1.5 text-[13px] outline-none"/><button onClick={confirmPr} className="rounded-lg bg-indigo-600 px-3 text-[13px] font-medium text-white">Add</button></div>}</label></div>
-      <div className="rounded-lg border border-zinc-200 p-3"><label className="flex items-center gap-2 text-[13px] font-medium text-zinc-700"><input type="checkbox" checked={noAwo} onChange={e=>setNoAwo(e.target.checked)} className="h-4 w-4 rounded accent-indigo-600"/> No AWO</label>{noAwo?<input value={awoCustom} onChange={e=>setAwoC(e.target.value)} placeholder="e.g. adhoc" className="mt-2 w-full rounded-lg border border-zinc-200 px-3 py-1.5 text-[13px] outline-none"/>:<p className="mt-1 text-[11px] text-zinc-400">Default: AWO</p>}</div>
-      <div className="grid grid-cols-2 gap-3"><label className="block"><span className="text-[12px] font-medium text-zinc-600">Limit Budget (฿)</span><input type="number" value={limitBudget||""} onChange={e=>setLB(Number(e.target.value))} className={`${fld} tabular-nums`}/></label><label className="block"><span className="text-[12px] font-medium text-zinc-600">Media Objective</span><select value={objective} onChange={e=>setObj(e.target.value)} className={fld}>{MEDIA_OBJECTIVES.map(o=><option key={o}>{o}</option>)}</select></label><label className="block"><span className="text-[12px] font-medium text-zinc-600">Optimization Goal</span><select value={goal} onChange={e=>setGoal(e.target.value)} className={fld}>{OPT_GOALS.map(o=><option key={o}>{o}</option>)}</select></label><label className="block"><span className="text-[12px] font-medium text-zinc-600">Target Split</span><select value={targetSplit} onChange={e=>setTS(e.target.value)} className={fld}>{TARGET_SPLITS.map(t=><option key={t}>{t}</option>)}</select></label><label className="block"><span className="text-[12px] font-medium text-zinc-600">Target KPI Result</span><input type="number" value={kpiResult||""} onChange={e=>setKR(Number(e.target.value))} className={`${fld} tabular-nums`}/></label><label className="block"><span className="text-[12px] font-medium text-zinc-600">CPR</span><input type="number" value={cpr||""} onChange={e=>setCPR(Number(e.target.value))} className={`${fld} tabular-nums`}/></label></div>
-      <div className="flex items-center gap-2"><span className="text-[12px] font-medium text-zinc-600">Creator:</span><div className="inline-flex rounded-lg border border-zinc-200 p-0.5 text-[13px]"><button onClick={()=>setCT("KOL")} className={`rounded-md px-3 py-1 font-medium ${creatorType==="KOL"?"bg-indigo-600 text-white":"text-zinc-500"}`}>KOL</button><button onClick={()=>setCT("Brand")} className={`rounded-md px-3 py-1 font-medium ${creatorType==="Brand"?"bg-indigo-600 text-white":"text-zinc-500"}`}>Brand</button></div></div>
-      <div className="rounded-lg border border-zinc-200 p-3 space-y-3"><span className="text-[12px] font-semibold text-zinc-700">{creatorType==="KOL"?"KOL Names":"Content Names"}</span><div className="flex gap-2"><textarea value={pasteText} onChange={e=>setPT(e.target.value)} rows={2} placeholder="Paste names (one per line)" className="flex-1 rounded-lg border border-zinc-200 px-3 py-2 font-mono text-[13px] outline-none resize-y"/><button onClick={parsePaste} disabled={!pasteText.trim()} className="self-end rounded-lg bg-indigo-600 px-3 py-2 text-[13px] font-medium text-white disabled:opacity-40">Add</button></div>{entries.length>0&&<div className="space-y-1.5 max-h-48 overflow-y-auto">{entries.map((e,i)=><div key={i} className="flex items-center gap-1.5 rounded-md bg-zinc-50 px-2 py-1.5"><span className="w-5 text-[10px] text-zinc-300 text-right">{i+1}</span><input value={e.name} onChange={ev=>updEntry(i,{name:ev.target.value})} className="flex-1 rounded border border-zinc-200 px-2 py-1 text-[13px] outline-none" placeholder="Name"/>{creatorType==="KOL"&&<><select value={e.tier} onChange={ev=>updEntry(i,{tier:ev.target.value})} className="w-20 rounded border border-zinc-200 px-1 py-1 text-[12px] outline-none">{KOL_TIERS.map(t=><option key={t}>{t}</option>)}</select><select value={e.type} onChange={ev=>updEntry(i,{type:ev.target.value})} className="w-24 rounded border border-zinc-200 px-1 py-1 text-[12px] outline-none">{KOL_TYPES.map(t=><option key={t}>{t}</option>)}</select></>}<input value={e.expireCode} onChange={ev=>updEntry(i,{expireCode:ev.target.value})} className="w-24 rounded border border-zinc-200 px-2 py-1 text-[12px] outline-none" placeholder="Expire"/><button onClick={()=>delEntry(i)} className="text-zinc-400 hover:text-rose-600"><Trash2 size={14}/></button></div>)}</div>}<p className="text-[11px] text-zinc-400">{entries.length} {creatorType==="KOL"?"KOL":"content"}{entries.length!==1?"s":""}</p></div>
-      <div className="rounded-lg border border-zinc-200 p-3 space-y-2"><span className="text-[12px] font-semibold text-zinc-700">Audiences (Cartesian expansion)</span><div className="flex flex-wrap gap-2">{AUDIENCE_OPTS.map(a=><label key={a} className={`flex items-center gap-1.5 rounded-full border px-3 py-1 text-[12px] font-medium cursor-pointer ${audiences.has(a)?"border-indigo-200 bg-indigo-50 text-indigo-700":"border-zinc-200 text-zinc-500"}`}><input type="checkbox" checked={audiences.has(a)} onChange={()=>toggleAud(a)} className="h-3.5 w-3.5 accent-indigo-600"/> {a}</label>)}</div><div className="flex items-center gap-2"><span className="text-[11px] text-zinc-500">Custom:</span><input value={customAud} onChange={e=>setCA(e.target.value)} placeholder="Prospect-Mom, Prospect-Lifestyle" className="flex-1 rounded-lg border border-zinc-200 px-2.5 py-1.5 text-[12px] outline-none"/></div><p className="text-[11px] text-zinc-400">{allAuds.length} audience{allAuds.length!==1?"s":""} × {entries.length} = <b>{totalRows}</b> rows</p></div>
-      <div className="grid grid-cols-2 gap-3"><label className="block"><span className="text-[12px] font-medium text-zinc-600">Year</span><select value={year} onChange={e=>setYear(Number(e.target.value))} className={fld}>{YEARS.map(y=><option key={y}>{y}</option>)}</select></label><label className="block"><span className="text-[12px] font-medium text-zinc-600">Month</span><select value={monthSel} onChange={e=>setMS(e.target.value)} className={fld}>{[...MONTHS,"Custom"].map(m=><option key={m}>{m}</option>)}</select></label></div>
-      {monthSel==="Custom"&&<input value={monthCustom} onChange={e=>setMC(e.target.value)} placeholder="e.g. Q2-Q3" className={fld}/>}
-      <div className="rounded-lg border border-zinc-200 p-3"><label className="flex items-center gap-2 text-[13px] font-medium text-zinc-700"><input type="checkbox" checked={useReserve} onChange={e=>setUR(e.target.checked)} className="h-4 w-4 rounded accent-indigo-600"/> Reserve budget</label>{useReserve&&<div className="mt-2 flex flex-wrap items-center gap-2"><input type="number" value={reserveVal||""} onChange={e=>setRV(Number(e.target.value))} className="w-28 rounded-lg border border-zinc-200 px-2.5 py-1.5 text-[13px] tabular-nums outline-none"/><div className="inline-flex rounded-lg border border-zinc-200 p-0.5 text-[12px]"><button onClick={()=>setRM("amount")} className={`rounded-md px-2.5 py-1 font-medium ${reserveMode==="amount"?"bg-indigo-600 text-white":"text-zinc-500"}`}>฿</button><button onClick={()=>setRM("percent")} className={`rounded-md px-2.5 py-1 font-medium ${reserveMode==="percent"?"bg-indigo-600 text-white":"text-zinc-500"}`}>%</button></div><span className="text-[12px] text-zinc-400">= {fmt(reserveTotal)}</span></div>}</div>
-      <div className="rounded-lg border border-zinc-200 p-3"><label className="flex items-center gap-2 text-[13px] font-medium text-zinc-700"><input type="checkbox" checked={splitEqually} onChange={e=>setSE(e.target.checked)} className="h-4 w-4 rounded accent-indigo-600"/> Split equally?</label>{splitEqually&&totalRows>0&&Number(limitBudget)>0&&<div className="mt-2 flex items-center gap-2 rounded-md bg-indigo-50 px-3 py-2 text-[12px] text-indigo-700"><Wand2 size={14}/><span className="tabular-nums">{fmt(allocatable)} ÷ {totalRows} = <b>{fmt(perRow)}</b>/row</span></div>}</div>
+      <div className="grid grid-cols-2 gap-3"><label className="block"><span className="text-[12px] font-medium text-zinc-600">Brand</span><select value={br} onChange={e=>chBr(e.target.value)} className={fld}>{brands.map(b=><option key={b}>{b}</option>)}</select></label><label className="block"><span className="text-[12px] font-medium text-zinc-600">Product</span><div className="mt-1 flex gap-1.5"><select value={pd} onChange={e=>sPd(e.target.value)} className="w-full rounded-lg border border-zinc-200 px-3 py-2 text-[14px] outline-none">{pr.length===0&&<option value="">Add →</option>}{pr.map(p=><option key={p}>{p}</option>)}</select><button onClick={()=>sAddPr(v=>!v)} className="grid h-9 w-9 shrink-0 place-items-center rounded-lg border border-zinc-200 text-indigo-600 hover:bg-indigo-50"><Plus size={16}/></button></div>{addPr&&<div className="mt-1.5 flex gap-1.5"><input autoFocus value={np} onChange={e=>sNp(e.target.value)} onKeyDown={e=>e.key==="Enter"&&addProd()} placeholder="New product" className="w-full rounded-lg border border-indigo-200 px-2.5 py-1.5 text-[13px] outline-none"/><button onClick={addProd} className="rounded-lg bg-indigo-600 px-3 text-[13px] font-medium text-white">Add</button></div>}</label></div>
+      <div className="rounded-lg border border-zinc-200 p-3"><label className="flex items-center gap-2 text-[13px] font-medium text-zinc-700"><input type="checkbox" checked={noAwo} onChange={e=>sNoAwo(e.target.checked)} className="h-4 w-4 accent-indigo-600"/> No AWO</label>{noAwo?<input value={awoCust} onChange={e=>sAwoCust(e.target.value)} placeholder="e.g. adhoc" className="mt-2 w-full rounded-lg border border-zinc-200 px-3 py-1.5 text-[13px] outline-none"/>:<p className="mt-1 text-[11px] text-zinc-400">Default: AWO</p>}</div>
+      <div className="grid grid-cols-2 gap-3"><label className="block"><span className="text-[12px] font-medium text-zinc-600">Limit Budget (฿)</span><input type="number" value={limitB||""} onChange={e=>sLimitB(Number(e.target.value))} className={`${fld} tabular-nums`}/></label><label className="block"><span className="text-[12px] font-medium text-zinc-600">Media Objective</span><select value={obj} onChange={e=>sObj(e.target.value)} className={fld}>{MEDIA_OBJ.map(o=><option key={o}>{o}</option>)}</select></label><label className="block"><span className="text-[12px] font-medium text-zinc-600">Optimization Goal</span><select value={goal} onChange={e=>sGoal(e.target.value)} className={fld}>{OPT_GOALS.map(o=><option key={o}>{o}</option>)}</select></label><label className="block"><span className="text-[12px] font-medium text-zinc-600">Target Split</span><select value={ts} onChange={e=>sTs(e.target.value)} className={fld}>{TARGET_SPLITS.map(t=><option key={t}>{t}</option>)}</select></label><label className="block"><span className="text-[12px] font-medium text-zinc-600">Target KPI Result</span><input type="number" value={kpiR||""} onChange={e=>sKpiR(Number(e.target.value))} className={`${fld} tabular-nums`}/></label><label className="block"><span className="text-[12px] font-medium text-zinc-600">Cost per Result</span><input type="number" step="0.01" value={cpr||""} onChange={e=>sCpr(Number(e.target.value))} className={`${fld} tabular-nums`}/></label></div>
+      <div className="flex items-center gap-2"><span className="text-[12px] font-medium text-zinc-600">Creator:</span><div className="inline-flex rounded-lg border border-zinc-200 p-0.5 text-[13px]"><button onClick={()=>sCt("KOL")} className={`rounded-md px-3 py-1 font-medium ${ct2==="KOL"?"bg-indigo-600 text-white":"text-zinc-500"}`}>KOL</button><button onClick={()=>sCt("Brand")} className={`rounded-md px-3 py-1 font-medium ${ct2==="Brand"?"bg-indigo-600 text-white":"text-zinc-500"}`}>Brand</button></div></div>
+
+      {/* Textarea-based KOL/Content inputs — auto-mapped by line number */}
+      <div className="rounded-lg border border-zinc-200 p-3 space-y-2">
+        <span className="text-[12px] font-semibold text-zinc-700">{ct2==="KOL"?"KOL Entries":"Content Entries"} <span className="font-normal text-zinc-400">— one per line, auto-mapped by line number</span></span>
+        <div className={`grid gap-2 ${ct2==="KOL"?"grid-cols-4":"grid-cols-2"}`}>
+          <div><label className="text-[10px] font-semibold text-zinc-500 uppercase">Names</label><textarea value={kolNames} onChange={e=>sKolNames(e.target.value)} rows={5} placeholder={"MaiReviews\nBeautyByNin\nSkinByLin"} className="w-full rounded-lg border border-zinc-200 px-2.5 py-2 font-mono text-[12px] outline-none resize-y"/></div>
+          {ct2==="KOL"&&<><div><label className="text-[10px] font-semibold text-zinc-500 uppercase">Tier</label><textarea value={kolTiers} onChange={e=>sKolTiers(e.target.value)} rows={5} placeholder={"Macro\nMicro\nNano"} className="w-full rounded-lg border border-zinc-200 px-2.5 py-2 font-mono text-[12px] outline-none resize-y"/></div><div><label className="text-[10px] font-semibold text-zinc-500 uppercase">Type</label><textarea value={kolTypes} onChange={e=>sKolTypes(e.target.value)} rows={5} placeholder={"Review\nTutorial\nLivestream"} className="w-full rounded-lg border border-zinc-200 px-2.5 py-2 font-mono text-[12px] outline-none resize-y"/></div></>}
+          <div><label className="text-[10px] font-semibold text-zinc-500 uppercase">Expire Code</label><textarea value={kolExpires} onChange={e=>sKolExpires(e.target.value)} rows={5} placeholder={"CODE-A\nCODE-B\n"} className="w-full rounded-lg border border-zinc-200 px-2.5 py-2 font-mono text-[12px] outline-none resize-y"/></div>
+        </div>
+        <p className="text-[11px] text-zinc-400">{entries.length} {ct2==="KOL"?"KOL":"content"}{entries.length!==1?"s":""} detected</p>
+      </div>
+
+      {/* Audiences — multi-select + multi-line custom */}
+      <div className="rounded-lg border border-zinc-200 p-3 space-y-2">
+        <span className="text-[12px] font-semibold text-zinc-700">Audiences <span className="font-normal text-zinc-400">→ Cartesian expansion</span></span>
+        <div className="flex flex-wrap gap-2">{AUDIENCE_OPTS.map(a=><label key={a} className={`flex items-center gap-1.5 rounded-full border px-3 py-1 text-[12px] font-medium cursor-pointer ${auds.has(a)?"border-indigo-200 bg-indigo-50 text-indigo-700":"border-zinc-200 text-zinc-500"}`}><input type="checkbox" checked={auds.has(a)} onChange={()=>togAud(a)} className="h-3.5 w-3.5 accent-indigo-600"/>{a}</label>)}</div>
+        <div><label className="text-[10px] font-semibold text-zinc-500 uppercase">Custom Audiences <span className="font-normal">(one per line or comma-separated)</span></label><textarea value={custAuds} onChange={e=>sCustAuds(e.target.value)} rows={2} placeholder={"Prospect-Mom\nProspect-Lifestyle, Interest-Beauty"} className="w-full rounded-lg border border-zinc-200 px-2.5 py-1.5 font-mono text-[12px] outline-none resize-y"/></div>
+        <p className="text-[11px] text-zinc-400">{allAuds.length} audience{allAuds.length!==1?"s":""} × {entries.length} = <b>{totalRows}</b> rows</p>
+      </div>
+
+      <div className="grid grid-cols-2 gap-3"><label className="block"><span className="text-[12px] font-medium text-zinc-600">Year</span><select value={yr} onChange={e=>sYr(Number(e.target.value))} className={fld}>{YEARS.map(y=><option key={y}>{y}</option>)}</select></label><label className="block"><span className="text-[12px] font-medium text-zinc-600">Month</span><select value={mo} onChange={e=>sMo(e.target.value)} className={fld}>{[...MONTHS,"Custom"].map(m=><option key={m}>{m}</option>)}</select></label></div>
+      {mo==="Custom"&&<input value={moCust} onChange={e=>sMoCust(e.target.value)} placeholder="Q2-Q3" className={fld}/>}
+
+      <div className="rounded-lg border border-zinc-200 p-3"><label className="flex items-center gap-2 text-[13px] font-medium text-zinc-700"><input type="checkbox" checked={useRes} onChange={e=>sUseRes(e.target.checked)} className="h-4 w-4 accent-indigo-600"/> Reserve budget</label>{useRes&&<div className="mt-2 flex flex-wrap items-center gap-2"><input type="number" value={resVal||""} onChange={e=>sResVal(Number(e.target.value))} className="w-28 rounded-lg border border-zinc-200 px-2.5 py-1.5 text-[13px] tabular-nums outline-none"/><div className="inline-flex rounded-lg border border-zinc-200 p-0.5 text-[12px]"><button onClick={()=>sResMode("amount")} className={`rounded-md px-2.5 py-1 font-medium ${resMode==="amount"?"bg-indigo-600 text-white":"text-zinc-500"}`}>฿</button><button onClick={()=>sResMode("percent")} className={`rounded-md px-2.5 py-1 font-medium ${resMode==="percent"?"bg-indigo-600 text-white":"text-zinc-500"}`}>%</button></div><span className="text-[12px] text-zinc-400">= {fmt(resTotal)}</span></div>}</div>
+      <div className="rounded-lg border border-zinc-200 p-3"><label className="flex items-center gap-2 text-[13px] font-medium text-zinc-700"><input type="checkbox" checked={splitEq} onChange={e=>sSplitEq(e.target.checked)} className="h-4 w-4 accent-indigo-600"/> Split equally?</label>{splitEq&&totalRows>0&&Number(limitB)>0&&<div className="mt-2 flex items-center gap-2 rounded-md bg-indigo-50 px-3 py-2 text-[12px] text-indigo-700"><Wand2 size={14}/><span className="tabular-nums">{fmt(alloc)} ÷ {totalRows} = <b>{fmt(perRow)}</b>/row</span></div>}</div>
     </div>
-    <div className="sticky bottom-0 flex items-center justify-between gap-2 border-t border-zinc-200 bg-white px-5 py-3 z-10"><span className="text-[11px] text-zinc-400">{totalRows} row{totalRows!==1?"s":""}</span><div className="flex gap-2"><button onClick={onClose} className="rounded-lg border border-zinc-200 px-4 py-1.5 text-[13px] font-medium text-zinc-600 hover:bg-zinc-50">Cancel</button><button onClick={submit} disabled={!canSubmit} className="rounded-lg bg-indigo-600 px-4 py-1.5 text-[13px] font-medium text-white hover:bg-indigo-700 disabled:opacity-40">Create</button></div></div>
+    <div className="sticky bottom-0 flex items-center justify-between border-t border-zinc-200 bg-white px-5 py-3 z-10"><span className="text-[11px] text-zinc-400">{totalRows} row{totalRows!==1?"s":""}</span><div className="flex gap-2"><button onClick={onClose} className="rounded-lg border border-zinc-200 px-4 py-1.5 text-[13px] font-medium text-zinc-600">Cancel</button><button onClick={submit} disabled={!canSubmit} className="rounded-lg bg-indigo-600 px-4 py-1.5 text-[13px] font-medium text-white disabled:opacity-40">Create</button></div></div>
   </div></div>);
 }
 
