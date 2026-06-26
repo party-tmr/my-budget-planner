@@ -17,3 +17,4 @@ jobs:
           firebaseServiceAccount: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_MY_BUDGET_PLANNER_230669 }}
           channelId: live
           projectId: my-budget-planner-230669
+          buildCommand: ""
